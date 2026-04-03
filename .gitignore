@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Frontend
+node_modules/
+dist/
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+application-dev-local.yml
+application-dev-local.yaml
+application-prod-local.yml
+application-prod-local.yaml
+secrets/
+*.secret
+*.pem
+*.key
+
+# Java / Spring local configs
+target/
+build/
+out/
+
+# MinIO / uploads / temp data
+tmp/
+temp/
+uploads/
+data/
+
+# Agent runtime artifacts
+.agents/
+.codex/

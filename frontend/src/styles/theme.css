@@ -1,0 +1,12 @@
+:root {
+  --brand-ink: #18243c;
+  --brand-accent: #d45d47;
+  --brand-accent-deep: #a94232;
+  --surface-main: rgba(255, 250, 245, 0.9);
+  --surface-border: rgba(24, 36, 60, 0.08);
+  --text-primary: #1d2a42;
+  --text-secondary: #52607a;
+  --text-muted: #8b95a8;
+  --font-display: "Georgia", "Songti SC", "STZhongsong", serif;
+  --font-body: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
