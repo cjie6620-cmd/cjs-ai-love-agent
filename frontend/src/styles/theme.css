@@ -1,12 +1,12 @@
 :root {
-  --brand-ink: #18243c;
-  --brand-accent: #d45d47;
-  --brand-accent-deep: #a94232;
-  --surface-main: rgba(255, 250, 245, 0.9);
-  --surface-border: rgba(24, 36, 60, 0.08);
-  --text-primary: #1d2a42;
-  --text-secondary: #52607a;
-  --text-muted: #8b95a8;
-  --font-display: "Georgia", "Songti SC", "STZhongsong", serif;
-  --font-body: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --brand-ink: #0f1728;
+  --brand-accent: #111111;
+  --brand-accent-deep: #111111;
+  --surface-main: #ffffff;
+  --surface-border: #e5e5ea;
+  --text-primary: #162033;
+  --text-secondary: #536078;
+  --text-muted: #7f8aa3;
+  --font-display: "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+  --font-body: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
 }

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -23,3 +24,24 @@ class ChatResponse(BaseModel):
     reply: str
     mode: ChatMode
     trace: ChatTrace
+
+
+class ConversationHistoryMessage(BaseModel):
+    id: str
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: datetime | None = Field(default=None, description="消息创建时间")
+
+
+class ConversationHistoryItem(BaseModel):
+    id: str
+    title: str
+    preview: str
+    mode: ChatMode
+    messages: list[ConversationHistoryMessage] = Field(default_factory=list)
+    latest_trace: ChatTrace | None = Field(default=None, description="最近一次助手回复 trace")
+
+
+class ConversationHistoryResponse(BaseModel):
+    user_id: str
+    conversations: list[ConversationHistoryItem] = Field(default_factory=list)

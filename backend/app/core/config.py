@@ -18,11 +18,15 @@ class Settings(BaseSettings):
     app_env: str = "local"
     debug: bool = True
     api_v1_prefix: str = "/api/v1"
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
+    cors_origin_regex: str = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
     mysql_url: str = "mysql+pymysql://ai_love:ai_love@127.0.0.1:3306/ai_love"
     redis_url: str = "redis://127.0.0.1:6379/0"
     vector_db_url: str = "postgresql+psycopg://ai_love:ai_love@127.0.0.1:5432/ai_love_vector"
+    db_auto_create_tables: bool = False
+    vector_auto_create_tables: bool = False
+    vector_dimension: int = 1536
 
     minio_endpoint: str = "127.0.0.1:9000"
     minio_access_key: str = "minioadmin"

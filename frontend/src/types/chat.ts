@@ -19,6 +19,27 @@ export interface ChatResponse {
   trace: ChatTrace
 }
 
+export interface ConversationHistoryMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  created_at?: string | null
+}
+
+export interface ConversationHistoryItem {
+  id: string
+  title: string
+  preview: string
+  mode: ChatMode
+  messages: ConversationHistoryMessage[]
+  latest_trace?: ChatTrace | null
+}
+
+export interface ConversationHistoryResponse {
+  user_id: string
+  conversations: ConversationHistoryItem[]
+}
+
 export interface HealthResponse {
   status: string
   service: string

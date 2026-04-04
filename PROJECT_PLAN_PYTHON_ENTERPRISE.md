@@ -616,6 +616,30 @@ flowchart TD
 | 风险事件 | 风险类型、命中规则、处理结果 |
 | Prompt 配置 | Prompt 版本、启停状态、适用场景 |
 
+### 13.3 当前仓库已落地的核心表
+
+当前仓库为了降低本地联调成本，已经按“业务表 + 向量表”两层结构落了最小可用数据模型，并在服务启动时自动执行缺表创建。
+
+关系型业务表：
+
+- `users`：用户主表，保存账号、昵称、头像、基础画像
+- `agent_profiles`：智能体配置表，保存模式、人设、Prompt 版本
+- `conversation_sessions`：会话表，保存标题、模式、摘要、风险级别
+- `conversation_messages`：消息表，保存逐条对话、trace 与安全标签
+- `safety_events`：风控事件表，保存命中类型、处理动作和审计快照
+
+向量表：
+
+- `memory_embeddings`：长期记忆向量
+- `knowledge_embeddings`：知识库向量
+- `style_sample_embeddings`：风格样本向量
+
+自动建表策略：
+
+- MySQL 使用 `SQLAlchemy create_all`，缺表时自动补齐
+- PostgreSQL 在建表前先执行 `CREATE EXTENSION IF NOT EXISTS vector`
+- 初始化失败只记日志，不阻塞 API 启动，方便本地分模块联调
+
 ---
 
 ## 14. 可观测性与评估体系设计

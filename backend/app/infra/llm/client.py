@@ -1,6 +1,6 @@
-import asyncio
+from collections.abc import AsyncIterator
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from ...core.config import get_settings
 
@@ -10,7 +10,7 @@ class LlmClient:
 
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.client = OpenAI(
+        self.client = AsyncOpenAI(
             api_key=self.settings.xai_api_key,
             base_url=self.settings.llm_base_url,
         )
@@ -19,11 +19,7 @@ class LlmClient:
         if not self.settings.xai_api_key:
             raise RuntimeError("未配置 XAI_API_KEY，无法调用真实模型。")
 
-        # OpenAI 官方 SDK 的同步客户端更通用，这里放到线程里执行，避免阻塞异步接口。
-        return await asyncio.to_thread(self._generate_sync, system_prompt, user_prompt)
-
-    def _generate_sync(self, system_prompt: str, user_prompt: str) -> str:
-        completion = self.client.chat.completions.create(
+        completion = await self.client.chat.completions.create(
             model=self.settings.llm_model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -31,3 +27,25 @@ class LlmClient:
             ],
         )
         return completion.choices[0].message.content or ""
+
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> AsyncIterator[str]:
+        if not self.settings.xai_api_key:
+            raise RuntimeError("未配置 XAI_API_KEY，无法调用真实模型。")
+
+        stream = await self.client.chat.completions.create(
+            model=self.settings.llm_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            stream=True,
+        )
+
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            if delta:
+                yield delta

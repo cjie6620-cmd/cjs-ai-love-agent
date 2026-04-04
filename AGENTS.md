@@ -278,3 +278,5 @@ def build_style_prompt(profile: StyleProfile, samples: list[str]) -> str:
 - 不引入与当前阶段不匹配的复杂基础设施。
 
 本项目最终目标是构建一个企业可落地、用户可持续使用、团队可持续维护的 AI 恋爱智能体系统。
+
+@RTK.md
