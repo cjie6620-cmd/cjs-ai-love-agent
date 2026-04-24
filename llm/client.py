@@ -14,7 +14,7 @@ import httpx
 
 from contracts.chat import ChatReplyModel, MemoryDecision
 from core.config import get_settings
-from llm.factory import build_llm_provider
+from llm.factory import build_llm_provider, build_memory_llm_provider
 from llm.providers import LlmProvider
 from llm.core.types import LlmMessage, McpCallInfo
 from observability import traceable_chain
@@ -38,6 +38,18 @@ class LlmClient:
         """
         self.settings = get_settings()
         self._provider: LlmProvider = build_llm_provider(self.settings)
+
+    @classmethod
+    def for_memory_analysis(cls) -> "LlmClient":
+        """创建长期记忆分析客户端。
+
+        目的：为 Celery 后台记忆任务构建固定使用 DeepSeek 的结构化输出客户端。
+        结果：返回与主聊天模型解耦的 LlmClient 实例。
+        """
+        client = cls.__new__(cls)
+        client.settings = get_settings()
+        client._provider = build_memory_llm_provider(client.settings)
+        return client
 
     @traceable_chain("llm.generate")
     async def generate(

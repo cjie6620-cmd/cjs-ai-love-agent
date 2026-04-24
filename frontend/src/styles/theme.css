@@ -76,16 +76,18 @@
   --radius-xl: var(--radius-2xl);
 
   /* Chat workspace tokens */
-  --chat-bg: #0b0f15;
-  --chat-bg-elevated: #11141b;
-  --chat-panel: #151922;
-  --chat-panel-soft: #1b212c;
-  --chat-line: rgba(255, 255, 255, 0.08);
-  --chat-line-strong: rgba(123, 162, 255, 0.3);
-  --chat-text-primary: #eef2ff;
-  --chat-text-secondary: #cfd6e6;
-  --chat-text-muted: #919bae;
-  --chat-accent: #7ba2ff;
-  --chat-accent-strong: #5f87ee;
-  --chat-success: #5cb47a;
+  --chat-bg: #fff3ef;
+  --chat-bg-elevated: #fffaf7;
+  --chat-panel: rgba(255, 250, 247, 0.82);
+  --chat-panel-soft: rgba(255, 238, 232, 0.76);
+  --chat-line: rgba(157, 83, 100, 0.14);
+  --chat-line-strong: rgba(200, 95, 120, 0.28);
+  --chat-text-primary: #35272d;
+  --chat-text-secondary: #69545d;
+  --chat-text-muted: #9a8790;
+  --chat-accent: #c85f78;
+  --chat-accent-strong: #a43d58;
+  --chat-accent-soft: #f8dfe5;
+  --chat-warm: #f2b178;
+  --chat-success: #78937e;
 }

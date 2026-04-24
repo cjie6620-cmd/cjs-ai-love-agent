@@ -1,5 +1,8 @@
 <template>
   <div :class="['chat-view', { 'is-sidebar-collapsed': sidebarCollapsed }]">
+    <div class="ambient ambient-rose" />
+    <div class="ambient ambient-apricot" />
+
     <Transition name="panel-overlay">
       <button
         v-if="sidebarOpen"
@@ -24,7 +27,7 @@
     <section class="stage-panel">
       <div class="stage-toolbar">
         <button class="mobile-toggle focus-ring" type="button" @click="sidebarOpen = true">
-          历史记录
+          心动回忆
         </button>
       </div>
 
@@ -57,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 
 import ComposerBar from '@/components/chat/ComposerBar.vue'
 import ConversationSidebar from '@/components/chat/ConversationSidebar.vue'
@@ -83,13 +86,12 @@ const {
 
 const sidebarOpen = ref(false)
 const sidebarCollapsed = ref(false)
-const isMobileSidebarVisible = computed(() => sidebarOpen.value)
 
 const modeOptions: Array<{ label: string; value: ChatMode }> = [
-  { label: '陪伴', value: 'companion' },
-  { label: '建议', value: 'advice' },
-  { label: '复刻', value: 'style_clone' },
-  { label: '安抚', value: 'soothing' },
+  { label: '陪伴模式', value: 'companion' },
+  { label: '恋爱建议', value: 'advice' },
+  { label: '语气复刻', value: 'style_clone' },
+  { label: '情绪安抚', value: 'soothing' },
 ]
 
 const handleNewChat = () => {
@@ -119,6 +121,38 @@ onMounted(() => {
   gap: 0;
   height: 100%;
   min-height: 0;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(248, 190, 199, 0.38), transparent 28%),
+    radial-gradient(circle at 86% 8%, rgba(242, 177, 120, 0.24), transparent 26%),
+    linear-gradient(135deg, #fff7f2 0%, #ffeef1 45%, #fffaf7 100%);
+  color: var(--chat-text-primary);
+  overflow: hidden;
+}
+
+.ambient {
+  position: absolute;
+  z-index: 0;
+  border-radius: 999px;
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+.ambient-rose {
+  right: 12%;
+  top: 9%;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(200, 95, 120, 0.18), transparent 68%);
+  animation: floatGlow 8s ease-in-out infinite;
+}
+
+.ambient-apricot {
+  left: 32%;
+  bottom: 6%;
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, rgba(242, 177, 120, 0.16), transparent 70%);
+  animation: floatGlow 10s ease-in-out infinite reverse;
 }
 
 .chat-view.is-sidebar-collapsed {
@@ -127,6 +161,8 @@ onMounted(() => {
 
 .panel-wrap,
 .stage-panel {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -153,6 +189,7 @@ onMounted(() => {
   flex-direction: column;
   min-height: 0;
   align-self: stretch;
+  padding: 0;
 }
 
 .stage-toolbar {
@@ -160,23 +197,43 @@ onMounted(() => {
 }
 
 .chat-shell {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  border-top: 1px solid var(--chat-line);
-  border-left: 1px solid var(--chat-line);
-  background: linear-gradient(180deg, rgba(15, 18, 24, 0.98), rgba(10, 12, 18, 0.98));
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 247, 0.9), rgba(255, 241, 238, 0.82)),
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.9), transparent 34%);
+  box-shadow: 0 24px 70px rgba(125, 72, 84, 0.14);
   overflow: hidden;
+  backdrop-filter: blur(18px);
+}
+
+.chat-shell::before {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 16px 16px, rgba(200, 95, 120, 0.08) 1px, transparent 1px),
+    linear-gradient(110deg, rgba(255, 255, 255, 0.52), transparent 34%);
+  background-size: 34px 34px, auto;
+  content: "";
+  pointer-events: none;
 }
 
 .chat-content-wrap {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
 }
 
 .chat-composer-wrap {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-shrink: 0;
   min-height: 0;
@@ -194,12 +251,14 @@ onMounted(() => {
 
 .mobile-toggle {
   min-height: 34px;
-  padding: 0 12px;
+  padding: 0 14px;
   border: 1px solid var(--chat-line);
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 999px;
+  background: rgba(255, 250, 247, 0.78);
   color: var(--chat-text-primary);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  box-shadow: var(--shadow-panel);
 }
 
 .mobile-overlay {
@@ -207,8 +266,8 @@ onMounted(() => {
   inset: 0;
   z-index: 19;
   border: none;
-  background: rgba(4, 8, 15, 0.48);
-  backdrop-filter: blur(3px);
+  background: rgba(75, 41, 50, 0.22);
+  backdrop-filter: blur(8px);
 }
 
 .panel-overlay-enter-active,
@@ -250,7 +309,7 @@ onMounted(() => {
   .stage-toolbar {
     display: flex;
     justify-content: flex-start;
-    padding: 0 0 10px;
+    padding: 0 0 12px;
   }
 
   .mobile-toggle {
@@ -259,13 +318,30 @@ onMounted(() => {
   }
 
   .chat-shell {
-    border-left: 1px solid var(--chat-line);
+    border-radius: 0;
+  }
+
+  .stage-panel {
+    padding: 0;
   }
 }
 
 @media (min-width: 961px) {
   .mobile-toggle {
     display: none;
+  }
+}
+
+@keyframes floatGlow {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translate3d(0, -14px, 0) scale(1.04);
   }
 }
 </style>

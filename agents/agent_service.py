@@ -19,10 +19,12 @@ from contracts.chat import (
     ConversationHistoryMessage,
     ConversationHistoryResponse,
 )
+from messaging import MemoryRocketMqProducer
 from observability import get_langsmith_service
-from persistence import ConversationRepository
+from persistence import ConversationRepository, MemoryOutboxRepository
 from security import RedisService, SafetyGuard
 
+from .memory_events import build_memory_extraction_message
 from .memory import MemoryManager, SessionMemoryManager
 from .workflows import CompanionGraphWorkflow, build_workflow_runtime
 
@@ -47,6 +49,8 @@ class AgentService:
         memory_manager: MemoryManager | None = None,
         session_memory: SessionMemoryManager | None = None,
         safety_guard: SafetyGuard | None = None,
+        memory_mq_producer: MemoryRocketMqProducer | None = None,
+        memory_outbox_repository: MemoryOutboxRepository | None = None,
     ) -> None:
         """初始化 AgentService。
         
@@ -65,6 +69,8 @@ class AgentService:
         self.session_memory = session_memory or SessionMemoryManager(redis_service=redis_service)
         # Redis 服务：用于缓存 workflow 上下文（memory_hits / knowledge_hits）
         self._redis = redis_service or RedisService()
+        self.memory_mq_producer = memory_mq_producer or MemoryRocketMqProducer()
+        self.memory_outbox_repository = memory_outbox_repository or MemoryOutboxRepository()
         # DB 同步方法在异步上下文中用线程池执行，避免阻塞事件循环
         self._db_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat_db_")
 
@@ -75,6 +81,7 @@ class AgentService:
         结果：对象恢复到可控状态，降低资源泄漏和脏数据风险。
         """
         self._db_executor.shutdown(wait=False, cancel_futures=True)
+        self.memory_mq_producer.shutdown()
 
     async def reply(self, request: ChatRequest) -> ChatResponse:
         """处理非流式对话请求。
@@ -451,47 +458,39 @@ class AgentService:
             logger.debug("安全级别为 high，跳过记忆保存: user_id=%s", user_id)
             return
 
-        # 优先尝试 Celery 异步任务（LLM 驱动的智能提炼）
+        event = build_memory_extraction_message(
+            user_id=user_id,
+            session_id=session_id,
+            user_message=user_message,
+            assistant_reply=assistant_reply,
+        )
+
         try:
-            from .worker import extract_and_save_memory
-
-            extract_and_save_memory.delay(
-                user_id=user_id,
-                user_message=user_message,
-                assistant_reply=assistant_reply,
-                session_id=session_id,
-            )
-            logger.debug("记忆保存已提交 Celery 异步任务: user_id=%s", user_id)
-            return
-        except Exception as exc:
-            logger.debug("Celery 不可用，fallback 到同步 LLM 记忆提炼: %s", exc)
-
-        # Fallback：直接走结构化记忆决策，不再依赖魔法字符串。
-        try:
-            decision = await self.memory_manager.decide_memory(
-                user_message=user_message,
-                assistant_reply=assistant_reply,
-            )
-            if not decision.should_store or not decision.memory_text:
-                logger.debug(
-                    "结构化记忆决策跳过保存: user_id=%s, reason=%s",
-                    user_id,
-                    decision.reason_code,
-                )
-                return
-
-            await self.memory_manager.save_memory(
-                user_id,
-                decision.memory_text,
-                memory_type=decision.memory_type,
-                session_id=session_id,
-            )
+            self.memory_mq_producer.send(event)
             logger.debug(
-                "结构化记忆提炼完成: user_id=%s, type=%s, confidence=%.2f",
+                "长期记忆事件已投递 RocketMQ: user_id=%s, event_id=%s, task_id=%s",
                 user_id,
-                decision.memory_type,
-                decision.confidence,
+                event.event_id,
+                event.task_id,
             )
         except Exception as exc:
-            # fire-and-forget：记忆保存失败不影响主对话流程
-            logger.warning("记忆自动保存失败，跳过: user_id=%s, error=%s", user_id, exc)
+            payload = event.to_payload()
+            try:
+                outbox_id = self.memory_outbox_repository.save_pending(payload, error=str(exc))
+                logger.warning(
+                    "RocketMQ 投递失败，长期记忆事件已进入 Outbox: user_id=%s, event_id=%s, task_id=%s, outbox_id=%s, error=%s",
+                    user_id,
+                    event.event_id,
+                    event.task_id,
+                    outbox_id,
+                    exc,
+                )
+            except Exception as outbox_exc:
+                logger.error(
+                    "长期记忆事件投递和 Outbox 均失败: user_id=%s, event_id=%s, task_id=%s, mq_error=%s, outbox_error=%s",
+                    user_id,
+                    event.event_id,
+                    event.task_id,
+                    exc,
+                    outbox_exc,
+                )

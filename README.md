@@ -151,3 +151,38 @@ docker compose --profile amap up -d mcp-amap
 
 - `.env.example` 为根目录统一环境变量模板，实际运行时读取根目录 `.env`。
 - 项目只保留根目录新骨架，不再提供旧后端兼容入口或兼容路由。
+
+## 长期记忆 RocketMQ 异步落库
+
+长期记忆不在聊天主链路里直接提取和落库。聊天结束后会生成 `ai_love_memory_extraction` 事件，优先投递 RocketMQ；如果 RocketMQ 临时不可用，事件会写入 MySQL 的 `memory_event_outbox`，后续补投。
+
+### 基础设施
+
+```bash
+docker compose up -d rocketmq-namesrv rocketmq-broker rocketmq-dashboard
+```
+
+- RocketMQ Dashboard：http://127.0.0.1:8088
+- Topic：`ai_love_memory_extraction`
+- Tag：`memory.extract.v1`
+- Consumer Group：`ai_love_memory_consumer`
+- Redis 仍使用远程服务器，不在 `docker-compose.yml` 中启动。
+
+### 数据库初始化
+
+项目不会运行时自动建表，首次部署需要手工执行：
+
+```bash
+mysql -u root -p < sql/mysql_init.sql
+```
+
+`sql/mysql_init.sql` 中包含 `memory_event_outbox`，用于 RocketMQ 投递失败补偿。
+
+### 启动消费者和补投
+
+```bash
+python -m agents.memory_consumer
+python -m agents.memory_outbox_relay
+```
+
+消费者使用 DeepSeek 低成本结构化模型抽取 `MemoryDecision`，再调用长期记忆治理逻辑写入 pgvector。消费失败交给 RocketMQ 重试，超过最大次数进入 DLQ；业务侧用 `task_id` 做幂等，避免重复落库。

@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import Float, DateTime, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,10 +36,19 @@ class MemoryEmbedding(VectorBase):
     user_id: Mapped[str] = mapped_column(String(36), index=True)
     session_id: Mapped[str | None] = mapped_column(String(36), index=True)
     memory_type: Mapped[str] = mapped_column(String(32), index=True)
+    canonical_key: Mapped[str] = mapped_column(String(96), default="", index=True)
     content: Mapped[str] = mapped_column(Text)
+    importance_score: Mapped[float] = mapped_column(Float, default=0.0)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    source_session_id: Mapped[str] = mapped_column(String(36), default="", index=True)
+    merged_into_id: Mapped[str | None] = mapped_column(String(36), index=True)
     metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     embedding: Mapped[list[float]] = mapped_column(Vector(settings.vector_dimension))
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(

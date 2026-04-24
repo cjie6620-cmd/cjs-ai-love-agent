@@ -110,3 +110,23 @@ CREATE TABLE IF NOT EXISTS safety_events (
   CONSTRAINT fk_safety_events_conversation_id
     FOREIGN KEY (conversation_id) REFERENCES conversation_sessions (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 长期记忆 RocketMQ Outbox：RocketMQ 临时不可用时保存待补投事件
+CREATE TABLE IF NOT EXISTS memory_event_outbox (
+  id CHAR(36) NOT NULL PRIMARY KEY,
+  event_id CHAR(36) NOT NULL,
+  task_id VARCHAR(96) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  session_id CHAR(36) NOT NULL DEFAULT '',
+  payload JSON NOT NULL DEFAULT (JSON_OBJECT()),
+  status VARCHAR(24) NOT NULL DEFAULT 'pending',
+  retry_count BIGINT NOT NULL DEFAULT 0,
+  next_retry_at DATETIME NULL,
+  last_error TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_memory_event_outbox_event_id (event_id),
+  KEY idx_memory_event_outbox_task_id (task_id),
+  KEY idx_memory_event_outbox_user_id (user_id),
+  KEY idx_memory_event_outbox_status_next_retry (status, next_retry_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -6,9 +6,11 @@ from .models import (
     AgentProfile,
     ConversationMessage,
     ConversationSession,
+    MemoryEventOutbox,
     SafetyEvent,
     User,
 )
+from .memory_outbox_repository import MemoryOutboxRepository
 from .safety_event_repository import SafetyEventRepository
 
 __all__ = [
@@ -17,6 +19,8 @@ __all__ = [
     "ConversationMessage",
     "ConversationRepository",
     "ConversationSession",
+    "MemoryEventOutbox",
+    "MemoryOutboxRepository",
     "SafetyEvent",
     "SafetyEventRepository",
     "User",

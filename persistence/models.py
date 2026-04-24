@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db_base import Base
@@ -168,4 +168,38 @@ class SafetyEvent(Base):
     user: Mapped["User"] = relationship(back_populates="safety_events")
     conversation: Mapped["ConversationSession | None"] = relationship(
         back_populates="safety_events"
+    )
+
+
+class MemoryEventOutbox(Base):
+    """长期记忆 MQ 可靠投递补偿表。
+
+    目的：当 RocketMQ 暂时不可用时先保存待投递事件，避免长期记忆提取消息丢失。
+    结果：后台补偿任务可以按状态和下次重试时间扫描并重新投递。
+    """
+
+    __tablename__ = "memory_event_outbox"
+    __table_args__ = (
+        Index("idx_memory_event_outbox_status_next_retry", "status", "next_retry_at"),
+        Index("idx_memory_event_outbox_task_id", "task_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    event_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    task_id: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    session_id: Mapped[str] = mapped_column(String(36), default="")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", index=True)
+    retry_count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )

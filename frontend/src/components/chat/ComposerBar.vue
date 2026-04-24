@@ -7,7 +7,7 @@
           :auto-size="{ minRows: 2, maxRows: 5 }"
           :bordered="false"
           class="composer-input"
-          placeholder="给 AI Love 发送消息"
+          placeholder="写下想对 TA 说的话，或把心里的小纠结交给我"
           @update:value="$emit('update:draft', String($event ?? ''))"
           @pressEnter="handleEnter"
         />
@@ -32,7 +32,7 @@
           :loading="submitting"
           @click="$emit('submit')"
         >
-          发送
+          发送心意
         </a-button>
       </div>
     </div>
@@ -73,22 +73,27 @@ const handleEnter = (event: KeyboardEvent) => {
 .composer-bar {
   display: block;
   flex-shrink: 0;
-  padding: 12px 16px 0;
-  background: linear-gradient(180deg, rgba(13, 16, 22, 0), rgba(13, 16, 22, 0.94) 24%);
+  padding: 12px 20px 18px;
+  background: linear-gradient(180deg, rgba(255, 244, 241, 0), rgba(255, 244, 241, 0.88) 30%);
 }
 
 .composer-shell {
   display: grid;
   gap: 14px;
+  max-width: 900px;
+  margin: 0 auto;
   padding: 16px;
-  border: 1px solid var(--chat-line);
-  background: rgba(20, 24, 32, 0.96);
-  box-shadow: 0 22px 40px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 26px;
+  background: rgba(255, 250, 247, 0.84);
+  box-shadow: 0 18px 44px rgba(125, 72, 84, 0.14);
+  backdrop-filter: blur(18px);
 }
 
 .composer-input-wrap {
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(157, 83, 100, 0.1);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .composer-input {
@@ -103,6 +108,7 @@ const handleEnter = (event: KeyboardEvent) => {
   color: var(--chat-text-primary) !important;
   overflow-y: auto !important;
   resize: none;
+  background: transparent !important;
 }
 
 .composer-footer {
@@ -121,11 +127,12 @@ const handleEnter = (event: KeyboardEvent) => {
 .mode-chip {
   min-height: 34px;
   padding: 0 14px;
-  border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(157, 83, 100, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.56);
   color: var(--chat-text-muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition:
     border-color var(--transition-base),
@@ -135,20 +142,20 @@ const handleEnter = (event: KeyboardEvent) => {
 
 .mode-chip:hover,
 .mode-chip.is-active {
-  border-color: rgba(123, 162, 255, 0.4);
-  background: rgba(123, 162, 255, 0.12);
-  color: var(--chat-text-primary);
+  border-color: rgba(200, 95, 120, 0.32);
+  background: rgba(248, 223, 229, 0.88);
+  color: var(--chat-accent-strong);
 }
 
 .send-button.send-button {
-  min-width: 88px;
+  min-width: 104px;
   height: 40px;
-  font-weight: 600;
+  font-weight: 800;
 }
 
 @media (max-width: 760px) {
   .composer-bar {
-    padding: 12px 12px 0;
+    padding: 12px 12px 14px;
   }
 
   .composer-shell {

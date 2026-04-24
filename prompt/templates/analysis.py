@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""分析类 Prompt 模板：面向长期记忆决策等专用 structured 任务。"""
+"""分析类 Prompt 模板。"""
 
 from __future__ import annotations
 
@@ -7,30 +7,50 @@ from core.config import get_settings
 from prompt.contracts import PromptSection, PromptSpec
 from prompt.repository import PromptRepository
 
-_MEMORY_PROMPT_VERSION = "memory.decision.v1"
-_MEMORY_OUTPUT_VERSION = "memory_decision.v1"
+_MEMORY_PROMPT_VERSION = "memory.extraction.v2"
+_MEMORY_OUTPUT_VERSION = "memory_extraction.v2"
 
-_MEMORY_FEW_SHOTS = """示例1：
+_MEMORY_FEW_SHOTS = """示例1：应该保存
 输入片段：
-- user_message：我每次一吵架就会先沉默，不太会马上表达
-- assistant_reply：你在冲突里更容易先收回自己
-期望判断：
+- user_message：我叫小明，以后你可以直接叫我小明
+- assistant_reply：好呀小明，我记住这个称呼
+期望输出：
 - should_store=true
 - memory_type=profile_summary
-- memory_text=用户在冲突中容易先沉默和退回自我保护
-- confidence=0.92
-- reason_code=stable_profile
+- memory_text=用户的名字是小明，偏好被称呼为小明
+- canonical_key=profile:name
+- importance_score=0.95
+- confidence=0.98
+- merge_strategy=replace
+- reason_code=explicit_identity
 
-示例2：
+示例2：不应该保存
 输入片段：
-- user_message：今天有点烦，想随便聊聊
-- assistant_reply：可以，我们慢慢聊
-期望判断：
+- user_message：今天有点累，想随便聊聊
+- assistant_reply：可以，我们慢慢聊，不用急着整理清楚
+期望输出：
 - should_store=false
 - memory_type=none
 - memory_text=
-- confidence=0.08
-- reason_code=no_long_term_value"""
+- canonical_key=
+- importance_score=0.10
+- confidence=0.90
+- merge_strategy=skip
+- reason_code=temporary_mood
+
+示例3：应该保存
+输入片段：
+- user_message：我每次和伴侣吵架都会先沉默，不太会马上表达
+- assistant_reply：你在冲突里更像是先退回去保护自己
+期望输出：
+- should_store=true
+- memory_type=profile_summary
+- memory_text=用户在亲密关系冲突中倾向先沉默和自我保护
+- canonical_key=profile:conflict_style
+- importance_score=0.88
+- confidence=0.92
+- merge_strategy=append
+- reason_code=stable_relationship_pattern"""
 
 
 def build_memory_decision_prompt_spec(
@@ -38,66 +58,41 @@ def build_memory_decision_prompt_spec(
     user_message: str,
     assistant_reply: str,
 ) -> PromptSpec:
-    """
-    构建长期记忆决策 PromptSpec。
+    """构建长期记忆结构化提取 PromptSpec。
 
-    目的：基于用户消息和助手回复，判断对话是否值得写入长期记忆。
-    结果：返回用于判断记忆价值的 PromptSpec 对象。
+    目的：为后台 DeepSeek 结构化输出提供保守、可治理的长期记忆提取指令。
+    结果：返回包含字段契约、禁止项和 few-shot 的 PromptSpec。
     """
     settings = get_settings()
-
     fallback_policy = (
-        "如果不确定这段对话是否值得长期保存，默认 should_store=false。\n"
-        "不要为了凑字段而编造记忆。"
+        "MEMORY_SAVE_POLICY: conservative_extract_only. 信息不确定、价值不稳定或来源不是用户本人时，必须 should_store=false。\n"
+        "只提取可长期复用的用户事实、偏好、稳定关系模式、长期目标和明确称呼。\n"
+        "拒绝寒暄、临时情绪、一次性场景、普通问题、助手推测、助手编造内容和无关噪声。"
     )
     output_contract = (
-        "请围绕 should_store、memory_type、memory_text、confidence、reason_code 做判断。\n"
-        "如果没有长期价值，就明确给出 should_store=false。"
+        "???? MemoryExtractionResult / MemoryDecision schema ???\n"
+        "???should_store?memory_type?memory_text?canonical_key?importance_score?confidence?merge_strategy?reason_code?\n"
+        "should_store=false ??memory_type=none?memory_text ? canonical_key ???merge_strategy=skip?"
     )
-
     system_sections = [
-        PromptSection(
-            name="role",
-            content="你是长期记忆决策助手，负责判断本轮对话是否值得写入用户长期记忆。",
-        ),
-        PromptSection(
-            name="task",
-            content=(
-                "从用户消息和助手回复里提炼真正值得长期保存的信息。"
-                "只关注重要事件、稳定偏好、性格画像、关系关键角色。"
-            ),
-        ),
-        PromptSection(
-            name="constraints",
-            content=(
-                "- 空泛情绪、一次性寒暄、重复信息不要存。\n"
-                "- memory_text 必须是一句简洁、稳定、可检索的话。\n"
-                "- should_store=false 时，memory_type 必须为 none，memory_text 置空字符串。"
-            ),
-        ),
+        PromptSection(name="role", content="你是长期记忆治理分析器，只判断本轮对话是否值得进入用户长期记忆。"),
+        PromptSection(name="task", content="从 user_message 和 assistant_reply 中抽取一条最有价值的长期记忆；如果没有稳定价值，返回 should_store=false。"),
+        PromptSection(name="store_policy", content="允许保存：\n- 用户明确身份、称呼、长期偏好\n- 稳定的亲密关系状态和沟通模式\n- 反复出现的情绪触发点或边界\n- 长期目标、重要经历、明确承诺"),
+        PromptSection(name="reject_policy", content="必须拒绝：\n- 寒暄、感谢、闲聊\n- 今天/刚才/此刻的临时情绪\n- 一次性问题、一次性任务、短期安排\n- 助手自己的建议、猜测或编造内容\n- 与用户长期画像无关的噪声信息"),
+        PromptSection(name="field_guide", content="canonical_key ?? ????:?? ????? profile:name?preference:comfort_style?relationship:partner_status?\nimportance_score ??????????? 0.60 ??????\nconfidence ????????????? 0.70 ??????\nmerge_strategy ?? insert?replace?append?skip?????????? replace????????? append?"),
         PromptSection(name="examples", content=_MEMORY_FEW_SHOTS),
         PromptSection(name="output_contract", content=output_contract),
         PromptSection(name="fallback_policy", content=fallback_policy),
     ]
-
     user_sections = [
-        PromptSection(name="context", content=f"用户消息：{user_message.strip()}"),
-        PromptSection(name="context", content=f"助手回复：{assistant_reply.strip()}"),
-        PromptSection(
-            name="evidence",
-            content=(
-                "重点判断：\n"
-                "- 是否出现长期稳定的信息\n"
-                "- 是否出现重要关系事件\n"
-                "- 是否出现后续对话值得复用的人设/偏好"
-            ),
-        ),
+        PromptSection(name="context", content=f"?????{user_message.strip()}"),
+        PromptSection(name="context", content=f"?????{assistant_reply.strip()}"),
+        PromptSection(name="instruction", content="MEMORY_SAVE_POLICY: conservative_extract_only; do_not_record_everything; ignore_irrelevant_context. 只输出结构化字段，不要为了保存而保存。"),
     ]
-
     local_spec = PromptSpec(
-        name="memory.decision",
+        name="memory.extraction",
         prompt_version=_MEMORY_PROMPT_VERSION,
-        output_schema_name="MemoryDecision",
+        output_schema_name="MemoryExtractionResult",
         output_contract_version=_MEMORY_OUTPUT_VERSION,
         system_sections=system_sections,
         user_sections=user_sections,

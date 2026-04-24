@@ -2,7 +2,7 @@
   <aside :class="['conversation-sidebar', { 'is-collapsed': collapsed }]">
     <template v-if="collapsed">
       <button class="rail-toggle focus-ring" type="button" @click="$emit('toggle-collapse')">
-        展开
+        回忆
       </button>
     </template>
 
@@ -12,7 +12,7 @@
         <img class="brand-logo" src="/i-love-new-york.svg" alt="" />
         <div>
           <p class="sidebar-label">AI Love</p>
-          <h2>对话历史</h2>
+          <h2>心动回忆</h2>
         </div>
       </div>
 
@@ -23,7 +23,7 @@
 
     <button class="new-chat-button focus-ring" type="button" @click="$emit('new-chat')">
       <PlusOutlined />
-      新对话
+      开启新的心事
     </button>
 
     <div class="session-list">
@@ -39,8 +39,8 @@
       </button>
 
       <div v-if="conversations.length === 0" class="empty-history">
-        <strong>还没有历史消息</strong>
-        <span>发出第一条消息后，这里会保存你的会话记录。</span>
+        <strong>还没有留下心动回忆</strong>
+        <span>发出第一条消息后，这里会保存你们聊过的重要片段。</span>
       </div>
     </div>
     </template>
@@ -73,9 +73,13 @@ defineEmits<{
   min-width: 0;
   min-height: 0;
   height: 100%;
-  padding: 16px;
-  border-right: 1px solid var(--chat-line);
-  background: rgba(10, 13, 18, 0.98);
+  padding: 18px;
+  border-right: 1px solid rgba(255, 255, 255, 0.54);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 247, 0.9), rgba(255, 238, 232, 0.86)),
+    radial-gradient(circle at 30% 0%, rgba(248, 223, 229, 0.88), transparent 46%);
+  box-shadow: inset -1px 0 0 rgba(157, 83, 100, 0.08);
+  backdrop-filter: blur(16px);
 }
 
 .conversation-sidebar.is-collapsed {
@@ -90,10 +94,11 @@ defineEmits<{
   min-height: 34px;
   padding: 0 6px;
   border: 1px solid var(--chat-line);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--chat-text-primary);
+  border-radius: 999px;
+  background: rgba(255, 250, 247, 0.78);
+  color: var(--chat-accent-strong);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
   cursor: pointer;
   writing-mode: vertical-rl;
   text-orientation: mixed;
@@ -117,14 +122,14 @@ defineEmits<{
   width: 30px;
   height: 30px;
   object-fit: contain;
-  filter: grayscale(1) brightness(1.45);
+  filter: sepia(0.18) saturate(1.35);
 }
 
 .sidebar-label {
   margin: 0 0 4px;
   color: var(--chat-accent);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -132,6 +137,7 @@ defineEmits<{
 h2 {
   margin: 0;
   color: var(--chat-text-primary);
+  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 700;
 }
@@ -144,10 +150,11 @@ h2 {
   gap: 8px;
   min-height: 38px;
   border: 1px solid var(--chat-line);
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.58);
   color: var(--chat-text-primary);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 800;
   cursor: pointer;
   transition:
     border-color var(--transition-base),
@@ -161,18 +168,27 @@ h2 {
 
 .new-chat-button {
   width: 100%;
+  background: linear-gradient(135deg, rgba(200, 95, 120, 0.94), rgba(242, 177, 120, 0.88));
+  color: #fffaf7;
+  box-shadow: 0 14px 28px rgba(164, 61, 88, 0.16);
 }
 
 .collapse-button:hover,
 .new-chat-button:hover {
-  border-color: rgba(123, 162, 255, 0.34);
-  background: rgba(123, 162, 255, 0.08);
+  border-color: rgba(200, 95, 120, 0.34);
+  background: rgba(248, 223, 229, 0.86);
+  color: var(--chat-accent-strong);
+}
+
+.new-chat-button:hover {
+  background: linear-gradient(135deg, rgba(164, 61, 88, 0.96), rgba(238, 167, 109, 0.92));
+  color: #fffaf7;
 }
 
 .session-list {
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 8px;
   min-height: 0;
   overflow: auto;
 }
@@ -181,9 +197,10 @@ h2 {
   display: grid;
   gap: 4px;
   width: 100%;
-  padding: 12px 10px;
+  padding: 12px;
   border: 1px solid transparent;
-  background: transparent;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.44);
   text-align: left;
   cursor: pointer;
   transition:
@@ -193,8 +210,9 @@ h2 {
 
 .session-item:hover,
 .session-item.is-active {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(200, 95, 120, 0.18);
+  background: rgba(255, 250, 247, 0.86);
+  box-shadow: 0 12px 24px rgba(125, 72, 84, 0.08);
 }
 
 .session-title,
@@ -207,7 +225,7 @@ h2 {
 .session-title {
   color: var(--chat-text-primary);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 800;
 }
 
 .session-preview {

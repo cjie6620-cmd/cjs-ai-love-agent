@@ -81,6 +81,14 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     deepseek_model: str = "deepseek-chat"
 
+    rocketmq_namesrv_addr: str = "127.0.0.1:9876"
+    rocketmq_producer_group: str = "ai_love_memory_producer"
+    rocketmq_memory_topic: str = "ai_love_memory_extraction"
+    rocketmq_memory_tag: str = "memory.extract.v1"
+    rocketmq_memory_consumer_group: str = "ai_love_memory_consumer"
+    rocketmq_send_timeout_ms: int = 3000
+    rocketmq_max_reconsume_times: int = 16
+
     mcp_require_approval: bool = False
     mcp_tavily_enabled: bool = True
     mcp_amap_enabled: bool = False

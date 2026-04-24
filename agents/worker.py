@@ -124,16 +124,18 @@ def extract_and_save_memory(
 
             record_id = await memory_manager.save_memory(
                 user_id,
-                decision.memory_text,
-                memory_type=decision.memory_type,
+                decision,
                 session_id=session_id,
             )
             return {
-                "status": "saved",
+                "status": "saved" if record_id else "skipped",
                 "record_id": record_id,
                 "memory": decision.memory_text,
+                "canonical_key": decision.canonical_key,
                 "memory_type": decision.memory_type,
+                "importance_score": decision.importance_score,
                 "confidence": decision.confidence,
+                "merge_strategy": decision.merge_strategy,
             }
 
         result = asyncio.run(_run_memory_pipeline())

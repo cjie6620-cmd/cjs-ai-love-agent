@@ -11,6 +11,7 @@ ChatMode = Literal["companion", "advice", "style_clone", "soothing"]
 EvidenceStatus = Literal["grounded", "weak_grounding", "no_grounding"]
 MemoryType = Literal["event", "preference", "profile_summary", "none"]
 AnswerConfidence = Literal["high", "medium", "low"]
+MemoryMergeStrategy = Literal["insert", "replace", "append", "skip"]
 
 
 class MemoryHit(TypedDict):
@@ -104,45 +105,58 @@ class ChatReplyModel(BaseModel):
 
 
 class MemoryDecision(BaseModel):
-    """长期记忆写入决策。
-    
-    目的：描述长期记忆写入决策的数据结构和字段约束。
-    结果：对象在校验、序列化和模块传输时保持一致。
+    """长期记忆结构化提取结果。
+
+    目的：约束后台大模型对单轮对话的长期记忆分析输出，统一存储价值、治理键和合并策略。
+    结果：Celery 记忆任务可以基于该结构完成跳过、新增、替换或合并写入。
     """
 
     should_store: bool = Field(default=False, description="是否写入长期记忆")
     memory_type: MemoryType = Field(default="none", description="记忆类型")
     memory_text: str = Field(default="", description="归一化后的记忆文本")
+    canonical_key: str = Field(default="", description="同类记忆的稳定治理键")
+    importance_score: float = Field(default=0.0, ge=0.0, le=1.0, description="长期价值重要性评分")
     confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="置信度")
+    merge_strategy: MemoryMergeStrategy = Field(default="skip", description="同类记忆命中后的合并策略")
     reason_code: str = Field(default="no_value", description="原因编码")
 
     @field_validator("memory_text", mode="before")
     @classmethod
     def normalize_memory_text(cls, value: object) -> str:
-        """标准化 memory_text 字段输入。
-        
-        目的：标准化 memory_text 字段输入，统一边界值和格式。
-        结果：返回清洗后的结果，避免脏数据影响后续逻辑。
+        """标准化记忆文本。
+
+        目的：清理模型输出中的空值和首尾空白，避免脏文本进入治理链路。
+        结果：返回可继续校验和持久化的记忆文本。
         """
         return str(value or "").strip()
+
+    @field_validator("canonical_key", mode="before")
+    @classmethod
+    def normalize_canonical_key(cls, value: object) -> str:
+        """标准化治理键。
+
+        目的：收敛模型输出的治理键格式，保证同类记忆可以稳定去重。
+        结果：返回小写、去空白的 canonical_key。
+        """
+        return str(value or "").strip().lower()
 
     @field_validator("reason_code", mode="before")
     @classmethod
     def normalize_reason_code(cls, value: object) -> str:
-        """标准化 reason_code 字段输入。
-        
-        目的：标准化 reason_code 字段输入，统一边界值和格式。
-        结果：返回清洗后的结果，避免脏数据影响后续逻辑。
+        """标准化原因编码。
+
+        目的：清理模型输出中的空值和首尾空白，保证跳过或保存原因可观测。
+        结果：返回稳定的 reason_code。
         """
         return str(value or "no_value").strip() or "no_value"
 
     @field_validator("memory_type")
     @classmethod
     def validate_memory_type(cls, value: MemoryType, info) -> MemoryType:
-        """校验 memory_type 字段。
-        
-        目的：校验并修正 memory_type 字段，使其满足业务约束。
-        结果：返回符合规则的字段值，异常输入会被统一收敛。
+        """校验记忆类型。
+
+        目的：根据 should_store 约束 memory_type，避免跳过结果携带可写入类型。
+        结果：返回与写入决策一致的记忆类型。
         """
         should_store = bool(info.data.get("should_store", False))
         if should_store:
@@ -152,15 +166,44 @@ class MemoryDecision(BaseModel):
     @field_validator("memory_text")
     @classmethod
     def validate_memory_text(cls, value: str, info) -> str:
-        """校验 memory_text 字段。
-        
-        目的：校验并修正 memory_text 字段，使其满足业务约束。
-        结果：返回符合规则的字段值，异常输入会被统一收敛。
+        """校验记忆文本。
+
+        目的：限制可写入文本长度，并在跳过时清空文本。
+        结果：返回符合长期记忆存储约束的文本。
         """
         should_store = bool(info.data.get("should_store", False))
         if should_store:
-            return value[:100]
+            return value[:180]
         return ""
+
+    @field_validator("canonical_key")
+    @classmethod
+    def validate_canonical_key(cls, value: str, info) -> str:
+        """校验治理键。
+
+        目的：保证可写入记忆具备去重合并所需的稳定键，跳过结果不保留治理键。
+        结果：返回可用于查询的 canonical_key。
+        """
+        should_store = bool(info.data.get("should_store", False))
+        if not should_store:
+            return ""
+        return value[:96] or "memory:general"
+
+    @field_validator("merge_strategy")
+    @classmethod
+    def validate_merge_strategy(cls, value: MemoryMergeStrategy, info) -> MemoryMergeStrategy:
+        """校验合并策略。
+
+        目的：保证跳过结果不会触发写入策略，写入结果默认按新增处理。
+        结果：返回与 should_store 一致的合并策略。
+        """
+        should_store = bool(info.data.get("should_store", False))
+        if not should_store:
+            return "skip"
+        return "insert" if value == "skip" else value
+
+
+MemoryExtractionResult = MemoryDecision
 
 
 class ChatTrace(BaseModel):

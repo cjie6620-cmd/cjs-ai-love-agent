@@ -33,12 +33,16 @@ def mock_dependencies():
         patch("agents.agent_service.MemoryManager") as mock_memory_cls,
         patch("agents.agent_service.SessionMemoryManager") as mock_session_memory_cls,
         patch("agents.agent_service.RedisService") as mock_redis_cls,
+        patch("agents.agent_service.MemoryRocketMqProducer") as mock_mq_cls,
+        patch("agents.agent_service.MemoryOutboxRepository") as mock_outbox_cls,
     ):
         mock_workflow = mock_workflow_cls.return_value
         mock_repo = mock_repo_cls.return_value
         mock_memory = mock_memory_cls.return_value
         mock_session_memory = mock_session_memory_cls.return_value
         mock_redis = mock_redis_cls.return_value
+        mock_mq = mock_mq_cls.return_value
+        mock_outbox = mock_outbox_cls.return_value
 
         # 默认返回空历史
         mock_repo.list_recent_messages.return_value = []
@@ -66,6 +70,8 @@ def mock_dependencies():
             "memory": mock_memory,
             "session_memory": mock_session_memory,
             "redis": mock_redis,
+            "mq": mock_mq,
+            "outbox": mock_outbox,
         }
 
 
@@ -130,12 +136,29 @@ class TestReply:
         mock_dependencies["workflow"].run = AsyncMock(return_value=_make_response())
         service = AgentService()
 
-        # mock Celery 导入失败，强制走本地结构化记忆决策路径
-        with patch.dict("sys.modules", {"agents.worker": None}):
-            await service.reply(_make_request())
+        await service.reply(_make_request())
 
-        mock_dependencies["memory"].decide_memory.assert_called_once()
-        mock_dependencies["memory"].save_memory.assert_called_once()
+        service.memory_mq_producer.send.assert_called_once()
+        sent_event = service.memory_mq_producer.send.call_args.args[0]
+        assert sent_event.user_id == "user-001"
+        assert sent_event.session_id == "sess-001"
+        assert sent_event.task_id.startswith("memory:")
+        mock_dependencies["memory"].decide_memory.assert_not_called()
+        mock_dependencies["memory"].save_memory.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_reply_writes_outbox_when_rocketmq_fails(self, mock_dependencies):
+        """RocketMQ 投递失败时应写 Outbox 补偿，不能只打日志。"""
+        mock_dependencies["workflow"].run = AsyncMock(return_value=_make_response())
+        service = AgentService()
+        service.memory_mq_producer.send.side_effect = RuntimeError("rocketmq down")
+
+        await service.reply(_make_request())
+
+        service.memory_outbox_repository.save_pending.assert_called_once()
+        payload = service.memory_outbox_repository.save_pending.call_args.args[0]
+        assert payload["user_id"] == "user-001"
+        assert payload["task_id"].startswith("memory:")
 
     @pytest.mark.asyncio
     async def test_reply_skips_memory_for_high_risk(self, mock_dependencies):

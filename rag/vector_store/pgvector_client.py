@@ -6,7 +6,7 @@ import logging
 from typing import Any, Iterable
 from uuid import uuid4
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.config import get_settings
@@ -226,12 +226,18 @@ class PgVectorClient:
         memory_type: str = "event",
         content: str = "",
         session_id: str | None = None,
+        canonical_key: str = "",
+        importance_score: float = 0.0,
+        confidence: float = 0.0,
+        status: str = "active",
+        source_session_id: str = "",
+        merged_into_id: str | None = None,
         metadata_json: dict[str, Any] | None = None,
     ) -> str:
         """写入一条用户记忆向量。
 
-        目的：将用户的事件、偏好或关系记忆及其向量表示保存到长期记忆库。
-        结果：数据库新增一条记忆记录，并返回该条记忆的唯一 ID。
+        目的：保存经过结构化分析和治理后的长期记忆及其向量表示。
+        结果：数据库新增一条 active 记忆记录，并返回该条记忆的唯一 ID。
         """
         record_id = str(uuid4())
         record = MemoryEmbedding(
@@ -239,7 +245,13 @@ class PgVectorClient:
             user_id=user_id,
             session_id=session_id,
             memory_type=memory_type,
+            canonical_key=canonical_key,
             content=content,
+            importance_score=importance_score,
+            confidence=confidence,
+            status=status,
+            source_session_id=source_session_id or session_id or "",
+            merged_into_id=merged_into_id,
             metadata_json=metadata_json or {},
             embedding=embedding,
         )
@@ -247,6 +259,79 @@ class PgVectorClient:
             session.add(record)
             session.commit()
         return record_id
+
+    def get_active_memory_by_key(self, *, user_id: str, canonical_key: str) -> dict[str, Any] | None:
+        """按治理键读取用户 active 记忆。
+
+        目的：在写入长期记忆前定位同类记忆，支撑去重、替换和合并策略。
+        结果：返回匹配的 active 记忆字典，未命中时返回 None。
+        """
+        if not canonical_key:
+            return None
+        with self.session_factory() as session:
+            statement = (
+                select(MemoryEmbedding)
+                .where(MemoryEmbedding.user_id == user_id)
+                .where(MemoryEmbedding.canonical_key == canonical_key)
+                .where(MemoryEmbedding.status == "active")
+                .order_by(MemoryEmbedding.updated_at.desc())
+                .limit(1)
+            )
+            row = session.execute(statement).scalar_one_or_none()
+            if row is None:
+                return None
+            return self._serialize_memory(row)
+
+    def update_memory(
+        self,
+        record_id: str,
+        *,
+        embedding: list[float],
+        content: str,
+        memory_type: str,
+        importance_score: float,
+        confidence: float,
+        session_id: str | None = None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> str | None:
+        """更新一条 active 长期记忆。
+
+        目的：对同一 canonical_key 下的旧记忆执行替换或合并后的持久化更新。
+        结果：目标记忆内容、向量、评分和最近出现时间被刷新。
+        """
+        with self.session_factory() as session:
+            record = session.get(MemoryEmbedding, record_id)
+            if record is None:
+                return None
+            record.content = content
+            record.memory_type = memory_type
+            record.embedding = embedding
+            record.importance_score = importance_score
+            record.confidence = confidence
+            record.session_id = session_id or record.session_id
+            record.source_session_id = session_id or record.source_session_id
+            record.metadata_json = metadata_json or record.metadata_json or {}
+            record.last_seen_at = func.now()
+            record.updated_at = func.now()
+            session.commit()
+            return record.id
+
+    def touch_memory(self, record_id: str, *, metadata_json: dict[str, Any] | None = None) -> str | None:
+        """刷新记忆最近出现时间。
+
+        目的：在模型判断同类信息无需改写时记录该记忆再次出现，避免重复写入。
+        结果：目标记忆的 last_seen_at 和可选元数据被更新。
+        """
+        with self.session_factory() as session:
+            record = session.get(MemoryEmbedding, record_id)
+            if record is None:
+                return None
+            if metadata_json:
+                record.metadata_json = metadata_json
+            record.last_seen_at = func.now()
+            record.updated_at = func.now()
+            session.commit()
+            return record.id
 
     def search_memory(
         self,
@@ -274,17 +359,36 @@ class PgVectorClient:
 
             sql = text(
                 f"""
-                SELECT id, user_id, session_id, memory_type, content,
-                       metadata_json,
+                SELECT id, user_id, session_id, memory_type, canonical_key, content,
+                       importance_score, confidence, status, metadata_json,
                        1 - (embedding <=> CAST(:embedding AS vector)) AS score
                 FROM memory_embeddings
-                WHERE 1=1 {filters}
+                WHERE status = 'active' {filters}
                 ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :top_k
                 """
             )
             rows = session.execute(sql, params).mappings().all()
             return [dict(row) for row in rows]
+
+    def _serialize_memory(self, row: MemoryEmbedding) -> dict[str, Any]:
+        """序列化长期记忆 ORM 对象。
+
+        目的：统一向量存储层对外返回的记忆字段，避免上层依赖 ORM 实例。
+        结果：返回可用于治理、合并和测试断言的字典结构。
+        """
+        return {
+            "id": row.id,
+            "user_id": row.user_id,
+            "session_id": row.session_id,
+            "memory_type": row.memory_type,
+            "canonical_key": row.canonical_key,
+            "content": row.content,
+            "importance_score": row.importance_score,
+            "confidence": row.confidence,
+            "status": row.status,
+            "metadata_json": row.metadata_json,
+        }
 
     # ------------------------------------------------------------------ #
     # 风格样本写入与检索

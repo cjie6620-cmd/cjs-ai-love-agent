@@ -25,3 +25,15 @@ def build_llm_provider(settings: Settings) -> LlmProvider:
 
     logger.info("使用 XaiRouterProvider（Chat Completions API）")
     return XaiRouterProvider(settings)
+
+
+def build_memory_llm_provider(settings: Settings) -> LlmProvider:
+    """构建长期记忆后台分析 Provider。
+
+    目的：让长期记忆结构化分析固定使用 DeepSeek，避免与主聊天模型耦合。
+    结果：返回支持 with_structured_output 的 DeepseekMcpProvider 实例。
+    """
+    from llm.providers.openai_remote import DeepseekMcpProvider
+
+    logger.info("使用 DeepseekMcpProvider 执行长期记忆结构化分析")
+    return DeepseekMcpProvider(settings)

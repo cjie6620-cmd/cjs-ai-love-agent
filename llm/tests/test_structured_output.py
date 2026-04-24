@@ -93,7 +93,10 @@ async def test_decide_memory_uses_dedicated_structured_output(monkeypatch) -> No
         "should_store": True,
         "memory_type": "profile_summary",
         "memory_text": "用户冲突时容易先沉默。",
+        "canonical_key": "profile:conflict_style",
+        "importance_score": 0.88,
         "confidence": 0.88,
+        "merge_strategy": "append",
         "reason_code": "stable_profile",
     }
     monkeypatch.setattr(
@@ -103,7 +106,7 @@ async def test_decide_memory_uses_dedicated_structured_output(monkeypatch) -> No
     )
 
     result, _ = await provider.decide_memory(
-        _build_prompt_spec("memory.decision", "MemoryDecision")
+        _build_prompt_spec("memory.extraction", "MemoryExtractionResult")
     )
 
     assert isinstance(result, MemoryDecision)

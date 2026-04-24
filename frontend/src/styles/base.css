@@ -50,28 +50,28 @@ a {
 
 ::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(145, 155, 174, 0.28);
+  background: rgba(200, 95, 120, 0.26);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(145, 155, 174, 0.44);
+  background: rgba(200, 95, 120, 0.42);
 }
 
 ::selection {
   color: #ffffff;
-  background: rgba(123, 162, 255, 0.34);
+  background: rgba(200, 95, 120, 0.34);
 }
 
 .ant-btn-primary {
   border: none !important;
-  border-radius: 0 !important;
-  background: linear-gradient(135deg, var(--chat-accent-strong), var(--chat-accent)) !important;
-  box-shadow: 0 12px 24px rgba(95, 135, 238, 0.28) !important;
+  border-radius: 999px !important;
+  background: linear-gradient(135deg, var(--chat-accent-strong), var(--chat-accent), var(--chat-warm)) !important;
+  box-shadow: 0 14px 28px rgba(164, 61, 88, 0.22) !important;
 }
 
 .ant-btn-primary:hover,
 .ant-btn-primary:focus {
-  background: linear-gradient(135deg, #4f73ce, var(--chat-accent-strong)) !important;
+  background: linear-gradient(135deg, #96344e, var(--chat-accent), #eea76d) !important;
   transform: translateY(-1px);
 }
 
@@ -89,13 +89,13 @@ a {
 
 .ant-message-notice-content {
   border: 1px solid var(--chat-line);
-  border-radius: 0 !important;
-  background: rgba(21, 25, 34, 0.96) !important;
+  border-radius: 18px !important;
+  background: rgba(255, 250, 247, 0.96) !important;
   color: var(--chat-text-primary) !important;
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.22) !important;
+  box-shadow: var(--shadow-soft) !important;
 }
 
 .focus-ring:focus-visible {
-  outline: 2px solid rgba(123, 162, 255, 0.62);
+  outline: 2px solid rgba(200, 95, 120, 0.48);
   outline-offset: 2px;
 }

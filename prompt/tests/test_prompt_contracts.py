@@ -91,12 +91,14 @@ def test_memory_prompt_spec_has_semantic_contract_metadata() -> None:
 
     system_prompt = spec.render_system_prompt()
 
-    assert spec.prompt_version == "memory.decision.v1"
-    assert spec.output_schema_name == "MemoryDecision"
-    assert spec.output_contract_version == "memory_decision.v1"
+    assert spec.prompt_version == "memory.extraction.v2"
+    assert spec.output_schema_name == "MemoryExtractionResult"
+    assert spec.output_contract_version == "memory_extraction.v2"
     assert "<examples>" in system_prompt
     assert "<fallback_policy>" in system_prompt
     assert "should_store" in system_prompt
     assert "memory_type" in system_prompt
+    assert "canonical_key" in system_prompt
+    assert "do_not_record_everything" in spec.render_user_prompt()
     assert "输出 JSON" not in system_prompt
     assert "修复为合法 JSON" not in system_prompt

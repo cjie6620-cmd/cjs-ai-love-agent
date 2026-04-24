@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pytest
+import sys
+import types
 
 import core.startup_probe as startup_probe
 from core.config import Settings
@@ -72,6 +74,49 @@ def test_probe_vector_db_fails_when_required_tables_are_missing(
     assert result.ok is False
     assert result.name == "VectorDB"
     assert missing_table in result.detail
+
+
+def test_probe_celery_worker_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(redis_url="redis://127.0.0.1:6379/0")
+
+    class _FakeInspect:
+        def ping(self) -> dict[str, dict[str, str]]:
+            return {"celery@worker-1": {"ok": "pong"}}
+
+    class _FakeControl:
+        def inspect(self, timeout: int) -> _FakeInspect:
+            assert timeout == 3
+            return _FakeInspect()
+
+    fake_worker = types.SimpleNamespace(celery_app=types.SimpleNamespace(control=_FakeControl()))
+    monkeypatch.setitem(sys.modules, "agents.worker", fake_worker)
+
+    result = startup_probe.probe_celery_worker(settings)
+
+    assert result.ok is True
+    assert result.name == "CeleryWorker"
+    assert "celery@worker-1" in result.detail
+
+
+def test_probe_celery_worker_fails_when_no_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(redis_url="redis://127.0.0.1:6379/0")
+
+    class _FakeInspect:
+        def ping(self) -> dict[str, dict[str, str]]:
+            return {}
+
+    class _FakeControl:
+        def inspect(self, timeout: int) -> _FakeInspect:
+            return _FakeInspect()
+
+    fake_worker = types.SimpleNamespace(celery_app=types.SimpleNamespace(control=_FakeControl()))
+    monkeypatch.setitem(sys.modules, "agents.worker", fake_worker)
+
+    result = startup_probe.probe_celery_worker(settings)
+
+    assert result.ok is False
+    assert result.name == "CeleryWorker"
+    assert "未检测到在线 worker" in result.detail
 
 
 @pytest.mark.asyncio

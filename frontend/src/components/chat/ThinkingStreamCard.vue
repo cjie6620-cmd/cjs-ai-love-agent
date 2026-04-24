@@ -3,7 +3,7 @@
     <div class="thinking-head">
       <div class="thinking-head__meta">
         <span class="thinking-pulse" />
-        <strong>{{ status === 'done' ? '已思考' : '思考中' }}</strong>
+        <strong>{{ status === 'done' ? '已整理好思路' : '正在温柔思考' }}</strong>
       </div>
 
       <button
@@ -12,7 +12,7 @@
         type="button"
         @click="expanded = !expanded"
       >
-        {{ expanded ? '收起' : '查看' }}
+        {{ expanded ? '收起' : '查看细节' }}
       </button>
     </div>
 
@@ -43,12 +43,12 @@ const expanded = ref(true)
 
 const summaryText = computed(() => {
   if (props.chunks.length === 0) {
-    return props.status === 'done' ? '思考完成' : '正在整理思路'
+    return props.status === 'done' ? '已经整理好啦' : '正在接住你的情绪线索'
   }
   if (props.status === 'done') {
-    return `已完成思考，共 ${props.chunks.length} 条`
+    return `已经整理好 ${props.chunks.length} 条思路`
   }
-  return props.chunks[props.chunks.length - 1]?.content ?? '正在整理思路'
+  return props.chunks[props.chunks.length - 1]?.content ?? '正在接住你的情绪线索'
 })
 
 watch(
@@ -62,60 +62,114 @@ watch(
 
 <style scoped>
 .thinking-card {
+  position: relative;
   display: inline-grid;
-  gap: 6px;
-  width: min(100%, 560px);
-  padding: 10px 12px;
-  border: 1px solid rgba(123, 162, 255, 0.16);
-  background: rgba(34, 40, 50, 0.7);
-  color: var(--chat-text-muted);
+  gap: 9px;
+  width: min(100%, 520px);
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 250, 247, 0.86), rgba(248, 223, 229, 0.72)),
+    radial-gradient(circle at 14% 0%, rgba(242, 177, 120, 0.2), transparent 42%);
+  color: var(--chat-text-secondary);
+  box-shadow: 0 18px 38px rgba(125, 72, 84, 0.12);
+  overflow: hidden;
+  backdrop-filter: blur(16px);
+}
+
+.thinking-card::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--chat-accent), var(--chat-warm));
+  content: "";
 }
 
 .thinking-head {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
+  gap: 12px;
+  font-size: 13px;
 }
 
 .thinking-head__meta {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
+  min-width: 0;
+}
+
+.thinking-head__meta strong {
+  color: var(--chat-accent-strong);
+  font-weight: 800;
 }
 
 .thinking-toggle {
-  min-height: 24px;
-  padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(200, 95, 120, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
   color: var(--chat-text-muted);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
+  transition:
+    border-color var(--transition-base),
+    color var(--transition-base),
+    transform var(--transition-base);
+}
+
+.thinking-toggle:hover {
+  border-color: rgba(200, 95, 120, 0.32);
+  color: var(--chat-accent-strong);
+  transform: translateY(-1px);
 }
 
 .thinking-pulse {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
   background: var(--chat-accent);
+  box-shadow: 0 0 0 6px rgba(200, 95, 120, 0.1);
   animation: pulse 1.2s ease-in-out infinite;
 }
 
 .thinking-card.is-done .thinking-pulse {
   background: var(--chat-success);
+  box-shadow: 0 0 0 6px rgba(120, 147, 126, 0.12);
   animation: none;
 }
 
 .thinking-body {
-  font-size: 12px;
-  line-height: 1.7;
+  padding-left: 18px;
+  color: var(--chat-text-muted);
+  font-size: 13px;
+  line-height: 1.78;
   white-space: pre-wrap;
 }
 
 .thinking-lines {
   display: grid;
-  gap: 3px;
+  gap: 5px;
+}
+
+.thinking-lines span {
+  position: relative;
+  padding-left: 14px;
+}
+
+.thinking-lines span::before {
+  position: absolute;
+  left: 0;
+  top: 0.78em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(200, 95, 120, 0.42);
+  content: "";
 }
 
 .thinking-line-enter-active {
@@ -130,13 +184,13 @@ watch(
 @keyframes pulse {
   0%,
   100% {
-    opacity: 0.36;
+    opacity: 0.48;
     transform: scale(0.82);
   }
 
   50% {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1.08);
   }
 }
 </style>

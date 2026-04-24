@@ -1,9 +1,12 @@
 <template>
   <section ref="messageListRef" class="message-list">
     <div v-if="isEmpty" class="welcome-panel">
-      <p class="welcome-kicker">AI Love</p>
-      <h2>把你现在最想说的话发出来</h2>
-      <p>这里不会显示预设提示词，直接说你的处境、感受或想问的问题就可以。</p>
+      <div class="welcome-orbit">
+        <span>❤</span>
+      </div>
+      <p class="welcome-kicker">AI Love · 温柔在线</p>
+      <h2>把心里话慢慢说给我听</h2>
+      <p>不用组织得很完美，说出你的处境、感受或想问的问题，我会陪你一起理清。</p>
     </div>
 
     <TransitionGroup v-else name="message-in" tag="div" class="message-list-inner">
@@ -68,17 +71,17 @@ watch(
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  padding: 18px 24px 12px;
+  padding: 28px 32px 18px;
   overflow: auto;
 }
 
 .message-list-inner {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 22px;
   min-height: 100%;
   width: 100%;
-  max-width: 920px;
+  max-width: 900px;
   margin: 0 auto;
 }
 
@@ -88,34 +91,55 @@ watch(
   place-items: center;
   align-content: center;
   min-height: 100%;
-  max-width: 560px;
+  max-width: 620px;
   margin: 0 auto;
-  padding: 32px 0;
+  padding: 42px 0;
   text-align: center;
+}
+
+.welcome-orbit {
+  display: grid;
+  place-items: center;
+  width: 78px;
+  height: 78px;
+  margin: 0 auto 18px;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-radius: 28px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(248, 223, 229, 0.72)),
+    radial-gradient(circle at 28% 22%, rgba(242, 177, 120, 0.26), transparent 52%);
+  box-shadow: 0 20px 42px rgba(164, 61, 88, 0.16);
+}
+
+.welcome-orbit span {
+  color: var(--chat-accent);
+  font-size: 30px;
+  filter: drop-shadow(0 8px 14px rgba(164, 61, 88, 0.22));
+  animation: heartBeat 2.6s ease-in-out infinite;
 }
 
 .welcome-kicker {
   margin: 0 0 10px;
   color: var(--chat-accent);
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.12em;
 }
 
 h2 {
   margin: 0;
   color: var(--chat-text-primary);
+  font-family: var(--font-display);
   font-size: clamp(30px, 4vw, 38px);
-  line-height: 1.18;
-  letter-spacing: -0.03em;
+  line-height: 1.24;
+  letter-spacing: -0.02em;
 }
 
 .welcome-panel > p:last-child {
   max-width: 520px;
   margin: 14px 0 0;
   color: var(--chat-text-muted);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.85;
 }
 
@@ -130,11 +154,22 @@ h2 {
 
 @media (max-width: 760px) {
   .message-list {
-    padding: 16px 14px 12px;
+    padding: 18px 14px 12px;
   }
 
   h2 {
     font-size: 28px;
+  }
+}
+
+@keyframes heartBeat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(1.12);
   }
 }
 </style>

@@ -94,6 +94,41 @@ def probe_redis(settings: Settings | None = None) -> StartupProbeResult:
         return _build_result("Redis", False, endpoint, _format_exception(exc))
 
 
+def probe_celery_worker(settings: Settings | None = None) -> StartupProbeResult:
+    """检查 Celery worker 是否在线，避免记忆任务只入队不执行。"""
+    resolved_settings = settings or get_settings()
+    endpoint = _mask_url(resolved_settings.redis_url)
+    try:
+        from agents.worker import celery_app
+
+        responses = celery_app.control.inspect(timeout=3).ping() or {}
+        if not responses:
+            return _build_result("CeleryWorker", False, endpoint, "未检测到在线 worker")
+        worker_names = ",".join(sorted(responses.keys()))
+        return _build_result("CeleryWorker", True, endpoint, f"worker 在线: {worker_names}")
+    except Exception as exc:
+        return _build_result("CeleryWorker", False, endpoint, _format_exception(exc))
+
+
+def probe_rocketmq(settings: Settings | None = None) -> StartupProbeResult:
+    """检查 RocketMQ NameServer 配置与客户端依赖。"""
+    resolved_settings = settings or get_settings()
+    endpoint = resolved_settings.rocketmq_namesrv_addr
+    try:
+        from rocketmq.client import Producer
+
+        producer = Producer(f"{resolved_settings.rocketmq_producer_group}_probe")
+        producer.set_name_server_address(endpoint)
+        return _build_result(
+            "RocketMQ",
+            True,
+            endpoint,
+            f"客户端可用，topic={resolved_settings.rocketmq_memory_topic}",
+        )
+    except Exception as exc:
+        return _build_result("RocketMQ", False, endpoint, _format_exception(exc))
+
+
 def probe_vector_db(settings: Settings | None = None) -> StartupProbeResult:
     """检查 pgvector 数据库连通性与扩展可用性。"""
     resolved_settings = settings or get_settings()
@@ -271,6 +306,8 @@ async def run_startup_probes(settings: Settings | None = None) -> list[StartupPr
     results = [
         probe_mysql(resolved_settings),
         probe_redis(resolved_settings),
+        probe_celery_worker(resolved_settings),
+        probe_rocketmq(resolved_settings),
         probe_vector_db(resolved_settings),
         await probe_elasticsearch(resolved_settings),
         await probe_reranker(resolved_settings),
