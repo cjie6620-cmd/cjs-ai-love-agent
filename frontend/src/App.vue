@@ -1,7 +1,7 @@
 <template>
-  <WorkbenchView />
+  <AppShell />
 </template>
 
 <script setup lang="ts">
-import WorkbenchView from '@/views/WorkbenchView.vue'
+import AppShell from '@/layouts/AppShell.vue'
 </script>

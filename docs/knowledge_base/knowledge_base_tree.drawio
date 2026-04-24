@@ -1,0 +1,109 @@
+<mxfile host="app.diagrams.net" modified="2026-04-23T00:00:00.000Z" agent="Codex" version="24.7.17">
+  <diagram id="knowledge-base-tree" name="knowledge_base">
+    <mxGraphModel dx="1680" dy="986" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" value="knowledge_base&#10;RAG 知识库根目录" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1A2A4A;fontColor=#FFFFFF;strokeColor=#0F1D35;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="930" y="40" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="00_meta&#10;元数据 / 标签 / 分类 / 实体关系" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCE7F8;strokeColor=#6C8EBF;" vertex="1" parent="1">
+          <mxGeometry x="60" y="220" width="220" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="4" value="01_foundation&#10;传播学 / 心理学 / 社会学理论" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
+          <mxGeometry x="320" y="220" width="220" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="5" value="02_scenario&#10;亲密 / 家庭 / 社交 / 职场场景" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;" vertex="1" parent="1">
+          <mxGeometry x="580" y="220" width="220" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="6" value="03_skill&#10;沟通 / 情绪 / 人际 / 冲突等能力" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="840" y="220" width="220" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="7" value="04_strategy&#10;破冰 / 信任 / 推进 / 边界等打法" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="220" width="220" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="8" value="05_special&#10;异地恋 / 姐弟恋 / 暗恋 / 闪婚等专题" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE5CD;strokeColor=#D79B00;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="220" width="220" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="9" value="06_case&#10;成功案例 / 失败案例" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
+          <mxGeometry x="1620" y="220" width="220" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="10" value="relationship_knowledge&#10;高频关系话术分片库" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F4CCCC;strokeColor=#CC0000;" vertex="1" parent="1">
+          <mxGeometry x="1880" y="220" width="230" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="11" value="_templates&#10;concept / guideline / qa / scenario" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDEDED;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="930" y="350" width="240" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="12" value="01_foundation 子层&#10;传播学理论&#10;心理学基础&#10;社会学原理" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5FFF3;strokeColor=#82B366;" vertex="1" parent="1">
+          <mxGeometry x="320" y="350" width="220" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="13" value="02_scenario 子层&#10;亲密关系/恋人关系&#10;家庭关系&#10;社交拓展&#10;职场社交" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9E6;strokeColor=#D6B656;" vertex="1" parent="1">
+          <mxGeometry x="580" y="350" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="14" value="03_skill 子层&#10;自我认知 / 心理建设 / 情绪管理 / 情感处理&#10;沟通技巧 / 社交礼仪 / 人际关系 / 冲突处理" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF1F0;strokeColor=#B85450;" vertex="1" parent="1">
+          <mxGeometry x="840" y="350" width="260" height="116" as="geometry" />
+        </mxCell>
+        <mxCell id="15" value="04_strategy 子层&#10;破冰技巧 / 信任建立 / 关系推进 / 关系深化&#10;沟通技巧 / 冲突处理 / 边界表达" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F0FA;strokeColor=#9673A6;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="350" width="250" height="116" as="geometry" />
+        </mxCell>
+        <mxCell id="16" value="05_special 子层&#10;异地恋 / 姐弟恋 / 网恋 / 离婚后再恋&#10;以及暗恋、初恋、职场恋情、闪婚等文件专题" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF6EB;strokeColor=#D79B00;" vertex="1" parent="1">
+          <mxGeometry x="1430" y="350" width="270" height="116" as="geometry" />
+        </mxCell>
+        <mxCell id="17" value="06_case 子层&#10;成功案例&#10;失败案例" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EEF5FF;strokeColor=#6C8EBF;" vertex="1" parent="1">
+          <mxGeometry x="1670" y="350" width="200" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="18" value="relationship_knowledge 子层&#10;关系判断 / 破冰 / 日常聊天 / 邀约 / 约会 / 冲突修复&#10;边界表达 / 冷淡断联 / 安抚支持 / 分手复联 / 安全红线 / 改写示例" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF0F0;strokeColor=#CC0000;" vertex="1" parent="1">
+          <mxGeometry x="1880" y="350" width="260" height="132" as="geometry" />
+        </mxCell>
+        <mxCell id="101" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5F6B7A;" edge="1" parent="1" source="2" target="3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="102" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5F6B7A;" edge="1" parent="1" source="2" target="4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="103" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5F6B7A;" edge="1" parent="1" source="2" target="5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="104" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5F6B7A;" edge="1" parent="1" source="2" target="6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="105" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5F6B7A;" edge="1" parent="1" source="2" target="7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="106" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5F6B7A;" edge="1" parent="1" source="2" target="8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="107" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5F6B7A;" edge="1" parent="1" source="2" target="9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="108" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5F6B7A;" edge="1" parent="1" source="2" target="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="109" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5F6B7A;" edge="1" parent="1" source="2" target="11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="110" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82B366;" edge="1" parent="1" source="4" target="12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="111" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#D6B656;" edge="1" parent="1" source="5" target="13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="112" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#B85450;" edge="1" parent="1" source="6" target="14">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="113" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673A6;" edge="1" parent="1" source="7" target="15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="114" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#D79B00;" edge="1" parent="1" source="8" target="16">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="115" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6C8EBF;" edge="1" parent="1" source="9" target="17">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="116" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#CC0000;" edge="1" parent="1" source="10" target="18">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

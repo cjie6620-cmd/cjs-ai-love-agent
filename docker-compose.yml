@@ -1,49 +1,124 @@
-version: "3.9"
-
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: ai-love-mysql
+  elasticsearch:
+    build:
+      context: .
+      dockerfile: docker/elasticsearch/Dockerfile
+      args:
+        ES_VERSION: 8.12.2
+    container_name: ai-love-es
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: ai_love
-      MYSQL_USER: ai_love
-      MYSQL_PASSWORD: ai_love
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      xpack.security.enrollment.enabled: "true"
+      ELASTIC_PASSWORD: ${ES_PASSWORD:-change-me}
+      ES_JAVA_OPTS: -Xms2g -Xmx2g
+      bootstrap.memory_lock: "true"
+      network.host: 0.0.0.0
+      http.cors.enabled: "true"
+      http.cors.allow-origin: "http://127.0.0.1:8888,http://localhost:8888"
+      http.cors.allow-headers: "Authorization, Content-Type, X-Requested-With"
     ports:
-      - "3306:3306"
+      - "9200:9200"
+      - "9300:9300"
     volumes:
-      - mysql_data:/var/lib/mysql
-    command:
-      - --default-authentication-plugin=mysql_native_password
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u elastic:${ES_PASSWORD:-change-me} http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 1G
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
 
-  redis:
-    image: redis:7.2
-    container_name: ai-love-redis
+  kibana-setup:
+    image: curlimages/curl:8.6.0
+    container_name: ai-love-kibana-setup
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      ES_PASSWORD: ${ES_PASSWORD:-change-me}
+      KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:-change-me}
+    command:
+      - sh
+      - -c
+      - >
+        curl -fsS -u elastic:$${ES_PASSWORD}
+        -H 'Content-Type: application/json'
+        -X POST http://elasticsearch:9200/_security/user/kibana_system/_password
+        -d "{\"password\":\"$${KIBANA_SYSTEM_PASSWORD}\"}"
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.2
+    container_name: ai-love-kibana
+    restart: unless-stopped
+    depends_on:
+      kibana-setup:
+        condition: service_completed_successfully
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:-change-me}
+      SERVER_HOST: 0.0.0.0
+      XPACK_SECURITY_ENCRYPTIONKEY: ${KIBANA_SECURITY_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_SAVED_OBJECTS_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_REPORTING_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
     ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+      - "5601:5601"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5601/api/status >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  elasticvue:
+    image: cars10/elasticvue:latest
+    container_name: ai-love-elasticvue
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "8888:8080"
 
   postgres:
     image: pgvector/pgvector:pg16
     container_name: ai-love-pgvector
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ai_love_vector
       POSTGRES_USER: ai_love
-      POSTGRES_PASSWORD: ai_love
+      POSTGRES_PASSWORD: ${PGVECTOR_PASSWORD:-change-me}
     ports:
       - "5432:5432"
     volumes:
       - pgvector_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_love -d ai_love_vector"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   minio:
     image: minio/minio:latest
     container_name: ai-love-minio
+    restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-change-me}
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -51,8 +126,47 @@ services:
     volumes:
       - minio_data:/data
 
+  reranker-api:
+    build:
+      context: .
+      dockerfile: docker/reranker-api/Dockerfile
+    container_name: ai-love-reranker
+    restart: unless-stopped
+    environment:
+      RERANK_MODEL_NAME: BAAI/bge-reranker-v2-m3
+      RERANK_DEVICE: cpu
+      RERANK_BATCH_SIZE: "8"
+      HF_ENDPOINT: ""
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  mcp-amap:
+    profiles: ["amap"]
+    build:
+      context: .
+      dockerfile: docker/mcp-amap/Dockerfile
+    container_name: ai-love-mcp-amap
+    restart: unless-stopped
+    environment:
+      AMAP_MAPS_API_KEY: ${AMAP_MAPS_API_KEY:?AMAP_MAPS_API_KEY is required when using the amap profile}
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "3100"
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
 volumes:
-  mysql_data:
-  redis_data:
+  es_data:
   pgvector_data:
   minio_data:

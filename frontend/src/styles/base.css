@@ -1,14 +1,37 @@
 html,
 body,
 #app {
-  min-height: 100%;
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  margin: 0;
+  color: var(--chat-text-primary);
   font-family: var(--font-body);
-  color: var(--text-primary);
-  background: #f5f5f7;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  background: var(--chat-bg);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
+
+button {
+  color: inherit;
 }
 
 a {
@@ -16,63 +39,63 @@ a {
   text-decoration: none;
 }
 
-* {
-  box-sizing: border-box;
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
 }
 
-.surface-card {
-  border: 1px solid var(--surface-border) !important;
-  background: var(--surface-main) !important;
-  box-shadow: none;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.surface-card .ant-card-head {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.56);
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(145, 155, 174, 0.28);
 }
 
-.surface-card .ant-card-head-title {
-  font-family: var(--font-display);
-  font-size: 24px;
-  color: var(--brand-ink);
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(145, 155, 174, 0.44);
+}
+
+::selection {
+  color: #ffffff;
+  background: rgba(123, 162, 255, 0.34);
 }
 
 .ant-btn-primary {
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #1d1d1f 0%, #111111 100%);
-  box-shadow:
-    0 10px 24px rgba(17, 17, 17, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border: none !important;
+  border-radius: 0 !important;
+  background: linear-gradient(135deg, var(--chat-accent-strong), var(--chat-accent)) !important;
+  box-shadow: 0 12px 24px rgba(95, 135, 238, 0.28) !important;
 }
 
-.ant-btn-primary:hover {
-  opacity: 0.96;
+.ant-btn-primary:hover,
+.ant-btn-primary:focus {
+  background: linear-gradient(135deg, #4f73ce, var(--chat-accent-strong)) !important;
   transform: translateY(-1px);
-}
-
-.ant-btn {
-  border-radius: 10px;
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease;
 }
 
 .ant-input,
 .ant-input-affix-wrapper,
-.ant-input-textarea,
-.ant-segmented,
-.ant-tag {
-  border-radius: 10px !important;
+.ant-input-textarea {
+  color: var(--chat-text-primary) !important;
+  font-family: var(--font-body) !important;
 }
 
-.ant-menu-horizontal {
-  line-height: 40px;
+.ant-input::placeholder,
+.ant-input-textarea textarea::placeholder {
+  color: var(--chat-text-muted) !important;
 }
 
-.ant-menu-horizontal > .ant-menu-item-selected::after,
-.ant-menu-horizontal > .ant-menu-item:hover::after,
-.ant-menu-horizontal > .ant-menu-item-active::after {
-  border-bottom: none !important;
+.ant-message-notice-content {
+  border: 1px solid var(--chat-line);
+  border-radius: 0 !important;
+  background: rgba(21, 25, 34, 0.96) !important;
+  color: var(--chat-text-primary) !important;
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.22) !important;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid rgba(123, 162, 255, 0.62);
+  outline-offset: 2px;
 }

@@ -62,3 +62,7 @@ data/
 # Agent runtime artifacts
 .agents/
 .codex/
+.mcp.json
+.cursor/mcp.json
+.mcp-node/
+.npm-cache-temp/

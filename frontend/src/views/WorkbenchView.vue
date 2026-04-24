@@ -1,6 +1,13 @@
 <template>
+  <HeartParticles />
   <div class="chat-page">
-    <aside class="sidebar">
+    <!-- 移动端侧边栏遮罩层 -->
+    <Transition name="overlay-fade">
+      <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false" />
+    </Transition>
+
+    <!-- 侧边栏：桌面端常驻，移动端抽屉式滑入 -->
+    <aside :class="['sidebar', { 'is-open': sidebarOpen }]">
       <div class="sidebar-header">
         <div class="brand-wrap">
           <img class="brand-logo" src="/i-love-new-york.svg" alt="AI Love" />
@@ -16,13 +23,13 @@
         </a-button>
       </div>
 
-      <div v-if="historyConversations.length > 0" class="session-list">
+      <div class="session-list">
         <button
           v-for="item in historyConversations"
           :key="item.id"
           :class="['session-item', { 'is-active': item.id === activeConversationId }]"
           type="button"
-          @click="switchConversation(item.id)"
+          @click="switchConversation(item.id); sidebarOpen = false"
         >
           <span class="session-item-title">{{ item.title }}</span>
           <span class="session-item-preview">{{ item.preview }}</span>
@@ -32,6 +39,11 @@
 
     <main class="chat-main">
       <header class="chat-topbar">
+        <!-- 移动端汉堡按钮 -->
+        <button class="mobile-menu-btn" type="button" @click="sidebarOpen = true">
+          <MenuOutlined />
+        </button>
+
         <div class="chat-title-wrap">
           <div class="chat-title">{{ activeModeLabel }}</div>
           <div class="chat-subtitle">{{ activeConversation.preview }}</div>
@@ -51,38 +63,81 @@
         </div>
       </header>
 
-      <section class="message-list">
-        <div
-          v-for="item in activeConversation.messages"
-          :key="item.id"
-          :class="['message-row', item.role === 'user' ? 'is-user' : 'is-assistant']"
-        >
-          <div class="message-avatar">
-            <img
-              v-if="item.role === 'user' && userProfile.avatarUrl"
-              :src="userProfile.avatarUrl"
-              :alt="userProfile.name"
-              class="message-user-avatar"
-            />
-            <UserOutlined v-else-if="item.role === 'user'" />
-            <img v-else class="assistant-mark" src="/i-love-new-york.svg" alt="assistant" />
-          </div>
-
-          <div :class="['message-block', item.role === 'user' ? 'block-user' : 'block-assistant']">
-            <div class="message-text">{{ item.content }}</div>
-            <div v-if="item.loading" class="typing-line">正在生成回复...</div>
+      <section ref="messageListRef" class="message-list">
+        <!-- 空状态欢迎页 -->
+        <div v-if="isEmptyConversation" class="welcome-empty">
+          <img class="welcome-logo" src="/i-love-new-york.svg" alt="AI Love" />
+          <h2 class="welcome-title">AI Love</h2>
+          <p class="welcome-desc">说出你的心事，我在这里倾听</p>
+          <div class="welcome-hints">
+            <button
+              v-for="hint in quickHints"
+              :key="hint"
+              class="welcome-hint-chip"
+              type="button"
+              @click="activeConversation.draft = hint"
+            >
+              {{ hint }}
+            </button>
           </div>
         </div>
+
+        <!-- 消息列表 -->
+        <TransitionGroup v-else name="msg" tag="div" class="message-list-inner">
+          <div
+            v-for="item in activeConversation.messages"
+            :key="item.id"
+            :class="['message-row', item.role === 'user' ? 'is-user' : 'is-assistant']"
+          >
+            <div class="message-avatar">
+              <img
+                v-if="item.role === 'user' && userProfile.avatarUrl"
+                :src="userProfile.avatarUrl"
+                :alt="userProfile.name"
+                class="message-user-avatar"
+              />
+              <UserOutlined v-else-if="item.role === 'user'" />
+              <img v-else class="assistant-mark" src="/i-love-new-york.svg" alt="assistant" />
+            </div>
+
+            <div :class="['message-block', item.role === 'user' ? 'block-user' : 'block-assistant']">
+              <div class="message-text">{{ item.content }}</div>
+              <div v-if="item.loading" class="typing-line">
+                <span class="typing-dot" />
+                <span class="typing-dot" />
+                <span class="typing-dot" />
+                <span class="typing-label">正在回复...</span>
+              </div>
+              <div
+                v-if="shouldShowAdvisor(item)"
+                class="advisor-panel"
+              >
+                <div class="advisor-questions">
+                  <button
+                    v-for="question in item.advisor?.suggested_questions ?? []"
+                    :key="question"
+                    class="advisor-question-chip"
+                    type="button"
+                    :disabled="submitting"
+                    @click="sendAdvisorQuestion(question)"
+                  >
+                    {{ question }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </TransitionGroup>
       </section>
 
       <footer class="composer">
         <div class="composer-box">
           <a-textarea
             v-model:value="activeConversation.draft"
-            :auto-size="{ minRows: 2, maxRows: 6 }"
+            :auto-size="{ minRows: 1, maxRows: 4 }"
             :bordered="false"
             class="composer-input"
-            placeholder="发消息..."
+            placeholder="说点什么..."
             @pressEnter="handleEnter"
           />
 
@@ -96,10 +151,18 @@
                 @click="changeMode(item.value)"
               >
                 <component :is="item.icon" class="agent-chip-icon" />
-                <span>{{ item.label }}</span>
+                <span class="agent-chip-label">{{ item.label }}</span>
               </button>
             </div>
-            <a-button type="primary" :loading="submitting" @click="submitMessage">发送</a-button>
+            <a-button
+              class="send-btn"
+              type="primary"
+              shape="circle"
+              :loading="submitting"
+              @click="() => submitMessage()"
+            >
+              <template v-if="!submitting" #icon><SendOutlined /></template>
+            </a-button>
           </div>
         </div>
       </footer>
@@ -107,26 +170,32 @@
   </div>
 </template>
 
+<!-- 工作台视图组件脚本部分 -->
+
 <script setup lang="ts">
 import {
   BulbOutlined,
   CopyOutlined,
   HeartOutlined,
+  MenuOutlined,
   MessageOutlined,
   PlusOutlined,
+  SendOutlined,
   UserOutlined,
 } from '@ant-design/icons-vue'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 
+import HeartParticles from '@/components/HeartParticles.vue'
 import { fetchConversationHistory, fetchHealth, streamChatMessage } from '@/api/chat'
-import type { ChatMode, ChatTrace, ConversationHistoryItem } from '@/types/chat'
+import type { ChatAdvisor, ChatMode, ChatTrace, ConversationHistoryItem } from '@/types/chat'
 
 interface MessageItem {
   id: string
   role: 'user' | 'assistant'
   content: string
   loading?: boolean
+  advisor?: ChatAdvisor
 }
 
 interface ConversationItem {
@@ -146,6 +215,13 @@ const modeOptions = [
   { label: '安抚', value: 'soothing' as ChatMode, icon: HeartOutlined },
 ]
 
+const quickHints = [
+  '最近心情有点低落...',
+  '想聊聊感情的事',
+  '帮我分析一下 TA 的态度',
+  '需要一些鼓励',
+]
+
 const DEMO_USER_ID = 'user-demo-001'
 const DEFAULT_WELCOME_MESSAGE = '你好，直接发消息就行。'
 const DEFAULT_CONVERSATION_TITLE = '新对话'
@@ -155,6 +231,10 @@ const userProfile = reactive({
   name: '用户',
   avatarUrl: '',
 })
+
+const sidebarOpen = ref(false)
+
+const messageListRef = ref<HTMLElement | null>(null)
 
 const createMessageId = (role: MessageItem['role']) =>
   `${role}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
@@ -198,6 +278,7 @@ const mapConversationFromApi = (item: ConversationHistoryItem): ConversationItem
           role: messageItem.role,
           content: messageItem.content,
           loading: false,
+          advisor: messageItem.advisor ?? undefined,
         }))
       : [createWelcomeMessage()]
 
@@ -231,6 +312,30 @@ const activeModeLabel = computed(() => {
   const current = modeOptions.find((item) => item.value === activeConversation.value.mode)
   return current?.label ?? '陪伴'
 })
+
+const latestAssistantMessageId = computed(() => {
+  const messages = [...activeConversation.value.messages].reverse()
+  return messages.find((item) => item.role === 'assistant' && !item.loading)?.id ?? ''
+})
+
+const isEmptyConversation = computed(() => {
+  const msgs = activeConversation.value.messages
+  return msgs.length <= 1 && !msgs.some((m) => m.role === 'user')
+})
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    const el = messageListRef.value
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    }
+  })
+}
+
+watch(
+  () => activeConversation.value.messages.length,
+  () => scrollToBottom(),
+)
 
 const loadConversationHistory = async () => {
   const history = await fetchConversationHistory(DEMO_USER_ID)
@@ -282,9 +387,22 @@ const handleEnter = (event: KeyboardEvent) => {
   submitMessage()
 }
 
-const submitMessage = async () => {
+const shouldShowAdvisor = (messageItem: MessageItem) =>
+  messageItem.role === 'assistant' &&
+  messageItem.id === latestAssistantMessageId.value &&
+  !!messageItem.advisor?.suggested_questions?.length
+
+const sendAdvisorQuestion = (question: string) => {
+  submitMessage(question)
+}
+
+const submitMessage = async (directMessage?: unknown) => {
+  if (submitting.value) {
+    return
+  }
   const conversation = activeConversation.value
-  const currentMessage = conversation.draft.trim()
+  const rawMessage = typeof directMessage === 'string' ? directMessage : conversation.draft
+  const currentMessage = rawMessage.trim()
   if (!currentMessage) {
     message.warning('先输入一条消息')
     return
@@ -331,16 +449,23 @@ const submitMessage = async () => {
               messageTarget.loading = false
             }
           })
+          scrollToBottom()
         },
         onDone: (result) => {
           updateConversation(conversationId, (target) => {
             target.latestTrace = result.trace
             const messageTarget = target.messages.find((item) => item.id === assistantMessage.id)
             if (messageTarget) {
-              messageTarget.content = result.reply
+              // 流式阶段展示的是实时 token，done 阶段以后端最终结果为准。
+              // 这样可以兜底修正安全清洗、工具调用补全或分片丢失导致的内容偏差。
+              if (!messageTarget.content || !messageTarget.content.trim() || messageTarget.content !== result.reply) {
+                messageTarget.content = result.reply
+              }
               messageTarget.loading = false
+              messageTarget.advisor = result.advisor ?? undefined
             }
           })
+          scrollToBottom()
         },
         onError: (errorMessage) => {
           throw new Error(errorMessage)
@@ -374,32 +499,62 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* ================================================================
+   极光动态渐变背景
+   ================================================================ */
 .chat-page {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), transparent 28%),
-    linear-gradient(180deg, #f5f5f7 0%, #f1f2f6 100%);
+  height: 100dvh;
+  background: var(--surface-bg);
+  overflow: hidden;
 }
 
+/* ================================================================
+   移动端侧边栏遮罩
+   ================================================================ */
+.sidebar-overlay {
+  display: none;
+}
+
+.overlay-fade-enter-active,
+.overlay-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.overlay-fade-enter-from,
+.overlay-fade-leave-to {
+  opacity: 0;
+}
+
+/* ================================================================
+   毛玻璃侧边栏（桌面常驻 / 移动抽屉）
+   ================================================================ */
 .sidebar {
   display: flex;
   flex-direction: column;
-  padding: 18px;
-  background: rgba(248, 248, 250, 0.96);
-  border-right: 1px solid rgba(20, 20, 22, 0.06);
+  min-height: 0;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.32);
+  border-right: 1px solid rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
   box-shadow:
-    inset -1px 0 0 rgba(255, 255, 255, 0.82),
-    12px 0 30px rgba(15, 23, 42, 0.025);
+    inset -1px 0 0 rgba(255, 255, 255, 0.5),
+    8px 0 32px rgba(232, 68, 122, 0.03);
+  overflow-y: auto;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 18px;
-  border-bottom: 1px solid rgba(20, 20, 22, 0.08);
+  padding-bottom: 16px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(232, 68, 122, 0.1);
 }
 
 .brand-wrap {
@@ -409,129 +564,191 @@ onMounted(async () => {
 }
 
 .brand-logo {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
+  filter: drop-shadow(0 2px 6px rgba(232, 68, 122, 0.18));
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .brand {
-  font-size: 20px;
-  font-weight: 600;
-  color: #111111;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #d63384 0%, #e8447a 60%, #f7797d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .brand-subtitle {
-  font-size: 12px;
-  color: #8a8a8f;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
+/* 新建对话按钮 */
 .plain-icon-button {
-  color: #111111;
-  border: 1px solid rgba(20, 20, 22, 0.08);
-  background: linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%);
-  box-shadow:
-    0 8px 18px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  color: var(--brand-rose);
+  border: 1px solid rgba(232, 68, 122, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2px 8px rgba(232, 68, 122, 0.06);
+  transition: all 0.25s ease;
 }
 
 .plain-icon-button:hover {
-  color: #111111 !important;
-  border-color: rgba(20, 20, 22, 0.14) !important;
-  background: linear-gradient(180deg, #ffffff 0%, #eff1f4 100%) !important;
+  color: var(--brand-rose-deep) !important;
+  border-color: rgba(232, 68, 122, 0.24) !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: 0 4px 16px rgba(232, 68, 122, 0.12) !important;
+  transform: translateY(-1px);
 }
 
+/* ================================================================
+   会话列表
+   ================================================================ */
 .session-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 18px;
+  gap: 4px;
+  margin-top: 12px;
 }
 
 .session-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px;
+  gap: 3px;
+  padding: 11px 12px;
   text-align: left;
   border: 1px solid transparent;
+  border-radius: 12px;
   background: transparent;
   cursor: pointer;
   transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
+    background 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s ease,
+    box-shadow 0.3s ease,
     transform 0.2s ease;
 }
 
-.session-item:hover,
-.session-item.is-active {
-  background: rgba(255, 255, 255, 0.78);
-  border-color: rgba(20, 20, 22, 0.06);
+.session-item:hover {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(232, 68, 122, 0.1);
+  transform: translateY(-1px);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 8px 18px rgba(15, 23, 42, 0.04);
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 6px 20px rgba(232, 68, 122, 0.06);
 }
 
-.session-item:hover {
-  transform: translateY(-1px);
+.session-item.is-active {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(232, 68, 122, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 6px 20px rgba(232, 68, 122, 0.1);
 }
 
 .session-item-title {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
-  color: #111111;
+  color: var(--text-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-item-preview {
   font-size: 12px;
-  color: #777777;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* ================================================================
+   聊天主区域
+   ================================================================ */
 .chat-main {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(249, 249, 251, 0.98));
+  min-height: 0;
+  background: transparent;
+  overflow: hidden;
 }
 
+/* ================================================================
+   磨砂玻璃顶栏
+   ================================================================ */
 .chat-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 28px;
-  border-bottom: 1px solid rgba(20, 20, 22, 0.06);
-  backdrop-filter: blur(20px);
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.78);
+  gap: 12px;
+  padding: 14px 24px;
+  border-bottom: 1px solid rgba(232, 68, 122, 0.08);
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+}
+
+/* 移动端汉堡按钮 — 桌面隐藏 */
+.mobile-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(232, 68, 122, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--brand-rose);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.mobile-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 4px 12px rgba(232, 68, 122, 0.1);
 }
 
 .chat-title-wrap {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #111111;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-heading);
+  letter-spacing: -0.01em;
 }
 
 .chat-subtitle {
   font-size: 12px;
-  color: #8a8a8f;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topbar-user {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .user-avatar-shell {
@@ -539,53 +756,67 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid rgba(20, 20, 22, 0.08);
-  background: linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%);
-  box-shadow:
-    0 10px 22px rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(232, 68, 122, 0.1);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 4px 12px rgba(232, 68, 122, 0.06);
 }
 
 .user-avatar-image,
 .message-user-avatar {
   width: 100%;
   height: 100%;
+  border-radius: 50%;
   object-fit: cover;
 }
 
 .user-avatar-fallback {
-  font-size: 18px;
-  color: #555555;
+  font-size: 16px;
+  color: var(--text-secondary);
 }
 
 .user-status-dot {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 10px;
-  height: 10px;
-  border: 2px solid #ffffff;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
   background: #c9c9ce;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
 .user-status-dot.is-online {
   background: #34c759;
+  box-shadow: 0 0 6px rgba(52, 199, 89, 0.45);
 }
 
+/* ================================================================
+   消息列表
+   ================================================================ */
 .message-list {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 20px;
-  padding: 32px 32px 20px;
-  overflow: auto;
+  min-height: 0;
+  padding: 24px 28px 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+.message-list-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .message-row {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
 }
 
@@ -597,75 +828,263 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(20, 20, 22, 0.07);
-  background: rgba(255, 255, 255, 0.95);
-  color: #444444;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(232, 68, 122, 0.08);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   flex-shrink: 0;
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 4px 12px rgba(232, 68, 122, 0.05);
 }
 
 .assistant-mark {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
+/* ================================================================
+   消息气泡
+   ================================================================ */
 .message-block {
-  max-width: min(72%, 720px);
-  padding: 15px 18px;
-  border: 1px solid rgba(20, 20, 22, 0.06);
-  background: rgba(255, 255, 255, 0.92);
+  max-width: min(72%, 680px);
+  padding: 14px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.48);
   box-shadow:
-    0 12px 28px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    0 6px 20px rgba(74, 25, 66, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
+.block-assistant {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 用户消息气泡 — 柔和玫瑰渐变 */
 .block-user {
-  background: linear-gradient(180deg, #1a1a1c 0%, #111111 100%);
-  border-color: rgba(17, 17, 17, 0.92);
+  background: linear-gradient(135deg, #f7797d 0%, #e8447a 45%, #d63384 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: #ffffff;
-  box-shadow: 0 12px 28px rgba(17, 17, 17, 0.12);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    0 8px 24px rgba(232, 68, 122, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .message-text {
-  line-height: 1.85;
+  font-size: 14.5px;
+  line-height: 1.8;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.typing-line {
-  margin-top: 8px;
+.advisor-panel {
+  display: flex;
+  flex-direction: column;
+  padding-top: 2px;
+}
+
+.advisor-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.advisor-question-chip {
+  padding: 8px 12px;
+  border: 1px solid rgba(232, 68, 122, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--brand-rose-deep);
   font-size: 12px;
-  color: #8a8a8f;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
+.advisor-question-chip:hover:enabled {
+  border-color: rgba(232, 68, 122, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 6px 18px rgba(232, 68, 122, 0.08);
+  transform: translateY(-1px);
+}
+
+.advisor-question-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* ================================================================
+   心跳脉冲打字指示器（三点 + 文字）
+   ================================================================ */
+.typing-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 4px 0;
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-rose);
+  opacity: 0.5;
+  animation: typing-bounce 1.4s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.16s; }
+.typing-dot:nth-child(3) { animation-delay: 0.32s; }
+
+.typing-label {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--brand-rose);
+  opacity: 0.7;
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.35; }
+  40%           { transform: scale(1.1); opacity: 0.9; }
+}
+
+/* ================================================================
+   空状态欢迎页
+   ================================================================ */
+.welcome-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 40px 20px;
+  text-align: center;
+  animation: welcome-fade-in 0.6s ease;
+}
+
+@keyframes welcome-fade-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.welcome-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 4px 12px rgba(232, 68, 122, 0.2));
+  animation: welcome-float 4s ease-in-out infinite;
+}
+
+@keyframes welcome-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
+.welcome-title {
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #d63384, #e8447a, #f7797d);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.welcome-desc {
+  margin: 0 0 28px;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.welcome-hints {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.welcome-hint-chip {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--brand-rose-deep);
+  border: 1px solid rgba(232, 68, 122, 0.15);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.welcome-hint-chip:hover {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(232, 68, 122, 0.28);
+  box-shadow: 0 4px 16px rgba(232, 68, 122, 0.1);
+  transform: translateY(-1px);
+}
+
+/* ================================================================
+   磨砂玻璃输入区
+   ================================================================ */
 .composer {
-  padding: 14px 28px 28px;
-  border-top: 1px solid rgba(20, 20, 22, 0.06);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  flex-shrink: 0;
+  padding: 12px 24px 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+  border-top: 1px solid rgba(232, 68, 122, 0.06);
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
 }
 
 .composer-box {
-  border: 1px solid rgba(20, 20, 22, 0.08);
-  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(232, 68, 122, 0.1);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.52);
   box-shadow:
-    0 20px 40px rgba(15, 23, 42, 0.055),
-    inset 0 1px 0 rgba(255, 255, 255, 0.94);
+    0 8px 28px rgba(232, 68, 122, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
   overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.composer-box:focus-within {
+  border-color: rgba(232, 68, 122, 0.25);
+  box-shadow:
+    0 8px 28px rgba(232, 68, 122, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .composer-input {
-  padding: 18px 20px 18px;
-  font-size: 15px;
+  padding: 14px 18px;
+  font-size: 14.5px;
 }
 
+.composer-input :deep(textarea.ant-input) {
+  max-height: 112px !important;
+  overflow-y: auto !important;
+  resize: none;
+}
+
+/* ================================================================
+   模式切换芯片
+   ================================================================ */
 .agent-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
   min-width: 0;
 }
@@ -673,71 +1092,290 @@ onMounted(async () => {
 .agent-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 5px;
+  padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
-  color: #6d6d73;
-  font-size: 15px;
+  color: var(--text-muted);
+  font-size: 13px;
   cursor: pointer;
   transition:
-    background 0.2s ease,
-    color 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    background 0.25s ease,
+    color 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
 }
 
 .agent-chip:hover {
-  color: #111111;
-  background: rgba(244, 245, 248, 0.96);
+  color: var(--brand-rose);
+  background: rgba(232, 68, 122, 0.05);
 }
 
 .agent-chip.is-active {
-  color: #111111;
-  border-color: rgba(17, 17, 17, 0.08);
-  background: rgba(249, 249, 251, 0.98);
-  box-shadow:
-    0 8px 18px rgba(15, 23, 42, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  color: var(--brand-rose-deep);
+  border-color: rgba(232, 68, 122, 0.18);
+  background: rgba(232, 68, 122, 0.07);
+  box-shadow: 0 2px 10px rgba(232, 68, 122, 0.08);
 }
 
 .agent-chip-icon {
-  font-size: 18px;
+  font-size: 15px;
+}
+
+.agent-chip-label {
+  line-height: 1;
 }
 
 .composer-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 16px 16px;
-  border-top: 1px solid rgba(20, 20, 22, 0.05);
+  gap: 12px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid rgba(232, 68, 122, 0.05);
 }
 
-@media (max-width: 960px) {
+/* 发送按钮 — 圆形玫瑰渐变 */
+.send-btn.send-btn {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-rose-deep), var(--brand-rose));
+  border: none;
+  box-shadow: 0 4px 14px rgba(232, 68, 122, 0.22);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.send-btn.send-btn:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 8px 24px rgba(232, 68, 122, 0.32);
+}
+
+/* ================================================================
+   消息入场动画
+   ================================================================ */
+.msg-enter-active {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.msg-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.97);
+}
+
+.msg-move {
+  transition: transform 0.3s ease;
+}
+
+/* ================================================================
+   平板 (641px ~ 1024px)
+   侧边栏变窄，气泡更宽，字号微调
+   ================================================================ */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .chat-page {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    padding: 16px;
+  }
+
+  .brand-logo {
+    width: 28px;
+    height: 28px;
+  }
+
+  .brand {
+    font-size: 17px;
+  }
+
+  .message-list {
+    padding: 20px 20px 12px;
+  }
+
+  .message-block {
+    max-width: 80%;
+  }
+
+  .chat-topbar {
+    padding: 12px 20px;
+  }
+
+  .composer {
+    padding: 10px 20px 16px;
+  }
+
+  .welcome-title {
+    font-size: 22px;
+  }
+}
+
+/* ================================================================
+   手机 (<=640px)
+   单列布局，侧边栏变抽屉，全面移动端优化
+   ================================================================ */
+@media (max-width: 640px) {
   .chat-page {
     grid-template-columns: 1fr;
   }
 
+  /* 侧边栏 — 抽屉式，从左滑入 */
   .sidebar {
-    display: none;
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 1000;
+    width: 280px;
+    max-width: 82vw;
+    transform: translateX(-100%);
+    border-right: none;
+    box-shadow: 8px 0 40px rgba(0, 0, 0, 0.1);
   }
 
-  .message-list,
-  .chat-topbar,
-  .composer {
-    padding-left: 16px;
-    padding-right: 16px;
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  /* 遮罩层 */
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(2px);
+  }
+
+  /* 显示汉堡按钮 */
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  /* 顶栏紧凑 */
+  .chat-topbar {
+    padding: 10px 14px;
+  }
+
+  .chat-title {
+    font-size: 15px;
+  }
+
+  .user-avatar-shell {
+    width: 32px;
+    height: 32px;
+  }
+
+  .user-avatar-fallback {
+    font-size: 14px;
+  }
+
+  /* 消息区域 — 全宽填满 */
+  .message-list {
+    padding: 16px 12px 12px;
+  }
+
+  .message-list-inner {
+    gap: 14px;
+  }
+
+  .message-avatar {
+    width: 30px;
+    height: 30px;
+  }
+
+  .assistant-mark {
+    width: 18px;
+    height: 18px;
   }
 
   .message-block {
-    max-width: 88%;
+    max-width: 85%;
+    padding: 12px 14px;
+    border-radius: 16px;
+  }
+
+  .message-text {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  /* 输入区域紧凑 */
+  .composer {
+    padding: 8px 10px 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
+  }
+
+  .composer-box {
+    border-radius: 16px;
+  }
+
+  .composer-input {
+    padding: 12px 14px;
+    font-size: 14px;
   }
 
   .composer-actions {
-    flex-direction: column;
-    align-items: stretch;
+    padding: 6px 10px 8px;
+    gap: 8px;
+  }
+
+  /* 模式芯片更紧凑 */
+  .agent-chip {
+    padding: 5px 9px;
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .agent-chip-icon {
+    font-size: 13px;
+  }
+
+  .send-btn.send-btn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+  }
+
+  /* 欢迎页适配 */
+  .welcome-logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .welcome-title {
+    font-size: 22px;
+  }
+
+  .welcome-desc {
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+
+  .welcome-hints {
+    gap: 6px;
+  }
+
+  .welcome-hint-chip {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+}
+
+/* ================================================================
+   超宽桌面 (>1440px) — 居中约束宽度
+   ================================================================ */
+@media (min-width: 1441px) {
+  .message-list-inner {
+    max-width: 860px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .composer-box {
+    max-width: 860px;
+    margin: 0 auto;
   }
 }
 </style>

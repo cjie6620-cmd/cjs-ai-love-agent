@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SSE 流式测试</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; }
+    h1 { color: #e8447a; }
+    #output { border: 1px solid #444; padding: 12px; min-height: 200px; max-height: 400px; overflow-y: auto; background: #0f0f1a; margin-bottom: 16px; border-radius: 8px; }
+    #output .token { color: #67e8f9; }
+    #output .done { color: #86efac; font-weight: bold; }
+    #output .error { color: #f87171; }
+    #output .debug { color: #9ca3af; font-size: 12px; }
+    #output .warn { color: #fbbf24; }
+    pre { margin: 2px 0; white-space: pre-wrap; word-break: break-all; font-size: 13px; }
+    button { padding: 10px 20px; background: #e8447a; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin: 4px; }
+    button:hover { background: #d63384; }
+    #status { padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+    .status-ok { background: rgba(134, 239, 172, 0.15); color: #86efac; }
+    .status-error { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+    .status-pending { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    #tokenCount { color: #67e8f9; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>SSE 流式输出测试</h1>
+
+  <div id="status" class="status-pending">等待发送请求...</div>
+
+  <div>
+    <button onclick="testSSE()">发送测试请求</button>
+    <button onclick="document.getElementById('output').innerHTML = ''">清空日志</button>
+  </div>
+
+  <div id="output"></div>
+
+  <script>
+    const output = document.getElementById('output')
+    const statusEl = document.getElementById('status')
+
+    function log(html, className = '') {
+      const div = document.createElement('div')
+      div.className = className
+      div.innerHTML = html
+      output.appendChild(div)
+      output.scrollTop = output.scrollHeight
+    }
+
+    function setStatus(text, cls) {
+      statusEl.textContent = text
+      statusEl.className = cls
+    }
+
+    async function testSSE() {
+      output.innerHTML = ''
+      setStatus('请求中... (流式)', 'status-pending')
+
+      let tokenCount = 0
+      let fullContent = ''
+
+      try {
+        log('<pre>[浏览器] 发起 fetch 请求到 /chat/reply/stream</pre>', 'debug')
+        log(`<pre>[浏览器] 模式: text/event-stream, 来源: ${location.origin}</pre>`, 'debug')
+
+        const response = await fetch('http://127.0.0.1:8000/api/v1/chat/reply/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: 'test-' + Date.now(),
+            user_id: 'user-demo-001',
+            message: 'hello',
+            mode: 'companion',
+          }),
+        })
+
+        log(`<pre>[浏览器] 响应状态: ${response.status} ${response.ok ? 'OK' : 'FAIL'}</pre>`, response.ok ? 'debug' : 'error')
+        log(`<pre>[浏览器] response.body 存在: ${!!response.body}</pre>`, response.ok ? 'debug' : 'error')
+
+        if (!response.ok || !response.body) {
+          const text = await response.text()
+          log(`<pre>[浏览器] 错误响应体: ${text.slice(0, 300)}</pre>`, 'error')
+          setStatus('请求失败: ' + response.status, 'status-error')
+          return
+        }
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder('utf-8')
+        let buffer = ''
+
+        setStatus('流接收中...', 'status-ok')
+
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) {
+            log(`<pre>[浏览器] 流结束，token数量: ${tokenCount}</pre>`, 'done')
+            log(`<pre>[完整内容] ${fullContent}</pre>`, 'done')
+            setStatus('流结束，共 ' + tokenCount + ' 个 token', 'status-ok')
+            break
+          }
+
+          // 将接收到的数据追加到缓冲区
+          const textChunk = decoder.decode(value, { stream: true })
+          log(`<pre>[原始数据块] 字节: ${value.byteLength}, 文本(${textChunk.length}字符): ${JSON.stringify(textChunk.slice(0, 80))}</pre>`, 'debug')
+
+          buffer += textChunk
+
+          // 按 SSE 事件分隔符切分
+          const segments = buffer.split('\n\n')
+          buffer = segments.pop() ?? ''
+
+          for (const segment of segments) {
+            const lines = segment.split('\n')
+            const eventLine = lines.find(l => l.startsWith('event:'))
+            const dataLine = lines.find(l => l.startsWith('data:'))
+
+            if (!eventLine || !dataLine) {
+              log(`<pre>[跳过] 无效段: ${JSON.stringify(segment.slice(0, 60))}</pre>`, 'warn')
+              continue
+            }
+
+            const event = eventLine.replace('event:', '').trim()
+            const rawData = dataLine.replace('data:', '').trim()
+
+            log(`<pre>[事件] event=${event}, data前60字符: ${JSON.stringify(rawData.slice(0, 60))}</pre>`, 'debug')
+
+            if (event === 'token') {
+              try {
+                const data = JSON.parse(rawData)
+                const content = String(data.content ?? '')
+                tokenCount++
+                fullContent += content
+                log(`<pre>[token #${tokenCount}] ${JSON.stringify(content)}</pre>`, 'token')
+              } catch (e) {
+                log(`<pre>[解析错误] ${e.message}, 数据: ${rawData.slice(0, 100)}</pre>`, 'error')
+              }
+            } else if (event === 'done') {
+              try {
+                const data = JSON.parse(rawData)
+                log(`<pre>[done] reply长度: ${(data.reply || '').length}, 模式: ${data.mode}</pre>`, 'done')
+              } catch (e) {
+                log(`<pre>[done解析错误] ${e.message}</pre>`, 'error')
+              }
+            } else if (event === 'error') {
+              log(`<pre>[error] ${rawData}</pre>`, 'error')
+            }
+          }
+        }
+
+        reader.releaseLock()
+      } catch (err) {
+        log(`<pre>[异常] ${err.message}</pre>`, 'error')
+        log(`<pre>[堆栈] ${err.stack}</pre>`, 'error')
+        setStatus('异常: ' + err.message, 'status-error')
+      }
+    }
+  </script>
+</body>
+</html>

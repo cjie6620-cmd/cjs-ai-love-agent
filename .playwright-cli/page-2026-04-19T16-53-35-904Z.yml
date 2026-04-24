@@ -1,0 +1,104 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - row "阿里云logo 中国站 " [ref=e6]:
+      - gridcell "阿里云logo" [ref=e7]:
+        - link "阿里云logo" [ref=e8] [cursor=pointer]:
+          - /url: //www.aliyun.com
+          - img "阿里云logo" [ref=e9]
+      - gridcell "中国站 " [ref=e11]:
+        - generic [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: 中国站
+          - generic [ref=e14]: 
+    - generic [ref=e17]:
+      - generic [ref=e18]:
+        - generic [ref=e19]: 全球生成式 AI “领导者”
+        - generic [ref=e20]: 中国 AI 云市场份额 超过 2-4 名总和
+      - generic [ref=e23]:
+        - generic [ref=e26]:
+          - generic [ref=e27]: 登录
+          - generic [ref=e28]: 阿里云APP/支付宝/钉钉
+          - img "二维码" [ref=e31]
+          - generic [ref=e33]:
+            - generic [ref=e34]: 其他方式
+            - generic [ref=e36]:
+              - generic [ref=e38] [cursor=pointer]: 
+              - generic [ref=e40] [cursor=pointer]: 
+              - generic [ref=e42] [cursor=pointer]: 
+              - generic [ref=e44] [cursor=pointer]: 
+              - generic [ref=e46] [cursor=pointer]: 
+        - generic [ref=e47]:
+          - generic [ref=e49]:
+            - generic [ref=e50]:
+              - generic [ref=e52] [cursor=pointer]: 账密登录
+              - generic [ref=e54] [cursor=pointer]: 手机号登录
+              - generic [ref=e56] [cursor=pointer]: 通行密钥
+            - iframe [ref=e61]:
+              - generic [ref=f1e6]:
+                - generic [ref=f1e7]:
+                  - generic [ref=f1e10]: 账号名
+                  - textbox "请输入" [ref=f1e12]
+                - generic [ref=f1e13]:
+                  - generic [ref=f1e16]: 密码
+                  - textbox "请输入" [ref=f1e18]
+                - text: 
+                - button "立即登录" [ref=f1e22] [cursor=pointer]
+          - generic [ref=e62] [cursor=pointer]:
+            - text: 前往注册
+            - img [ref=e63]
+          - generic [ref=e65]:
+            - generic [ref=e66]:
+              - generic [ref=e67] [cursor=pointer]:
+                - text: 忘记登录名
+                - img [ref=e68]
+              - generic [ref=e70] [cursor=pointer]:
+                - text: 忘记密码
+                - img [ref=e71]
+            - generic [ref=e74] [cursor=pointer]:
+              - text: RAM登录
+              - img [ref=e75]
+  - contentinfo "移动端页尾" [ref=e80]:
+    - generic [ref=e81]:
+      - generic [ref=e84]:
+        - generic [ref=e85]: 关注我们：
+        - link "新浪微博" [ref=e86] [cursor=pointer]:
+          - /url: https://weibo.com/u/1644971875
+          - text: 新浪微博
+      - link "联系我们" [ref=e88] [cursor=pointer]:
+        - /url: https://www.aliyun.com/contact
+      - generic [ref=e89]:
+        - link "文档" [ref=e90] [cursor=pointer]:
+          - /url: https://help.aliyun.com/
+        - text: "|"
+        - link "开发者社区" [ref=e91] [cursor=pointer]:
+          - /url: https://developer.aliyun.com/
+        - text: "|"
+        - link "天池大赛" [ref=e92] [cursor=pointer]:
+          - /url: https://tianchi.aliyun.com/
+        - text: "|"
+        - link "培训与认证" [ref=e93] [cursor=pointer]:
+          - /url: https://edu.aliyun.com/
+      - img "阿里云" [ref=e94]
+      - generic [ref=e95]:
+        - link "法律声明及隐私权政策" [ref=e96] [cursor=pointer]:
+          - /url: http://terms.aliyun.com/legal-agreement/terms/suit_bu1_ali_cloud/suit_bu1_ali_cloud201902141711_54837.html
+        - text: "|"
+        - link "Cookies政策" [ref=e97] [cursor=pointer]:
+          - /url: https://terms.alicdn.com/legal-agreement/terms/platform_service/20220906101446934/20220906101446934.html
+      - generic [ref=e98]:
+        - text: © 2009-现在 Aliyun.com 版权所有
+        - text: 增值电信业务经营许可证：
+        - link "浙B2-20080101" [ref=e99] [cursor=pointer]:
+          - /url: http://beian.miit.gov.cn/
+        - text: 域名注册服务机构许可：
+        - link "浙D3-20210002" [ref=e100] [cursor=pointer]:
+          - /url: "https://domain.miit.gov.cn/域名注册服务机构/互联网域名/阿里云计算有限公司 "
+      - generic [ref=e101]:
+        - link [ref=e102] [cursor=pointer]:
+          - /url: https://zzlz.gsxt.gov.cn/businessCheck/verifKey.do?showType=p&serial=91330106673959654P-SAIC_SHOW_10000091330106673959654P1710919400712&signData=MEUCIQDEkCd8cK7/yqe6BNMWvoMPtAnsgKa7FZetfPkjZMsvhAIgOX1G9YC6FKyndE7o7hL0KaBVn4f+V/iof3iAgpsV09o=
+          - img [ref=e103]
+        - link "浙公网安备 33010602009975号" [ref=e104] [cursor=pointer]:
+          - /url: http://www.beian.gov.cn/portal/registerSystemInfo
+          - img [ref=e105]
+          - text: 浙公网安备 33010602009975号
+        - link "浙B2-20080101-4" [ref=e106] [cursor=pointer]:
+          - /url: https://beian.miit.gov.cn/
