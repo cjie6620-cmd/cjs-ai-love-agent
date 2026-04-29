@@ -19,16 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 class MinioClient:
-    """MinIO 对象存储客户端，支持文件上传、下载、删除和预签名 URL 生成。
-    
-    目的：封装MinIO 对象存储客户端，支持文件上传、下载、删除和预签名 URL 生成相关的调用能力与资源管理。
+    """目的：封装MinIO 对象存储客户端，支持文件上传、下载、删除和预签名 URL 生成相关的调用能力与资源管理。
     结果：上层可通过统一客户端接口完成访问。
     """
 
     def __init__(self, *, log_startup: bool = True) -> None:
-        """初始化 MinioClient。
-        
-        目的：初始化MinioClient所需的依赖、配置和初始状态。
+        """目的：初始化MinioClient所需的依赖、配置和初始状态。
         结果：实例创建完成后可直接参与后续业务流程。
         """
         self.settings = get_settings()
@@ -69,9 +65,7 @@ class MinioClient:
             self.client = None  # type: ignore[assignment]
 
     def _ensure_bucket(self) -> None:
-        """确保目标 bucket 存在，不存在则创建。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         if not self.client.bucket_exists(self.bucket):
@@ -87,9 +81,7 @@ class MinioClient:
         content_type: str = "application/octet-stream",
         prefix: str = "knowledge",
     ) -> str | None:
-        """上传文件到 MinIO，返回对象键名（object_name）。
-
-        目的：持久化、上传或补充目标数据，保持状态同步。
+        """目的：持久化、上传或补充目标数据，保持状态同步。
         结果：相关数据被成功写入或更新，便于后续流程继续使用。
         """
         if not self._available:
@@ -117,9 +109,7 @@ class MinioClient:
             return None
 
     def download_file(self, object_name: str) -> bytes | None:
-        """从 MinIO 下载文件，返回文件二进制数据。
-
-        目的：按指定条件读取目标数据、资源或结果集合。
+        """目的：按指定条件读取目标数据、资源或结果集合。
         结果：返回可直接消费的查询结果，减少调用方重复处理。
         """
         if not self._available:
@@ -137,9 +127,7 @@ class MinioClient:
             return None
 
     def delete_file(self, object_name: str) -> bool:
-        """从 MinIO 删除文件。
-
-        目的：清理当前资源、连接或状态，避免残留副作用。
+        """目的：清理当前资源、连接或状态，避免残留副作用。
         结果：对象恢复到可控状态，降低资源泄漏和脏数据风险。
         """
         if not self._available:
@@ -160,9 +148,7 @@ class MinioClient:
         *,
         expires: timedelta | None = None,
     ) -> str | None:
-        """生成文件的预签名访问 URL。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         if not self._available:

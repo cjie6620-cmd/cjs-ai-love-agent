@@ -29,24 +29,25 @@ except Exception:  # pragma: no cover
 
 
 def _identity_decorator(*args: Any, **kwargs: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """_identity_decorator 方法。
-    
-    目的：执行_identity_decorator 方法相关逻辑。
+    """目的：执行_identity_decorator 方法相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     def _wrap(func: Callable[..., Any]) -> Callable[..., Any]:
+        """目的：在 LangSmith 依赖不可用时保持装饰器调用形态不变。
+        结果：被装饰函数原样返回，不产生 tracing 副作用。
+        """
         return func
 
     return _wrap
 
 
 class TraceSanitizer:
-    """LangSmith 上报前的统一脱敏器。
-
-    目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
+    """目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
     结果：相关模块可以围绕该对象稳定协作，提升代码可读性和可维护性。
     """
 
+    # 目的：保存 _TEXT_KEYS 字段，用于 TraceSanitizer 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 _TEXT_KEYS 值。
     _TEXT_KEYS = {
         "message",
         "content",
@@ -61,6 +62,8 @@ class TraceSanitizer:
         "input_summary",
         "output_summary",
     }
+    # 目的：保存 _IDENTITY_KEYS 字段，用于 TraceSanitizer 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 _IDENTITY_KEYS 值。
     _IDENTITY_KEYS = {
         "user_id",
         "session_id",
@@ -70,9 +73,7 @@ class TraceSanitizer:
 
     @classmethod
     def hash_identity(cls, value: str, *, prefix: str = "id") -> str:
-        """生成稳定的脱敏标识。
-
-        目的：统一处理输入值的边界情况、格式约束和清洗规则。
+        """目的：统一处理输入值的边界情况、格式约束和清洗规则。
         结果：返回满足约束的结果，避免脏数据影响后续逻辑。
         """
         text = str(value or "").strip()
@@ -83,18 +84,14 @@ class TraceSanitizer:
 
     @classmethod
     def thread_id(cls, session_id: str) -> str:
-        """执行 thread_id 方法。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         return cls.hash_identity(session_id, prefix="thread")
 
     @classmethod
     def summarize_text(cls, value: str | None, *, limit: int = 120) -> str:
-        """生成简要摘要信息。
-
-        目的：统一处理输入值的边界情况、格式约束和清洗规则。
+        """目的：统一处理输入值的边界情况、格式约束和清洗规则。
         结果：返回满足约束的结果，避免脏数据影响后续逻辑。
         """
         if not value:
@@ -106,9 +103,7 @@ class TraceSanitizer:
 
     @classmethod
     def sanitize_payload(cls, payload: Any, *, depth: int = 0) -> Any:
-        """sanitize_payload 方法。
-        
-        目的：执行当前步骤对应的处理逻辑。
+        """目的：执行当前步骤对应的处理逻辑。
         结果：返回当前步骤的处理结果，供后续流程继续使用。
         """
         if depth > 4:
@@ -143,18 +138,14 @@ class TraceSanitizer:
 
     @classmethod
     def sanitize_trace_inputs(cls, inputs: dict[str, Any]) -> dict[str, Any]:
-        """sanitize_trace_inputs 方法。
-        
-        目的：执行当前步骤对应的处理逻辑。
+        """目的：执行当前步骤对应的处理逻辑。
         结果：返回当前步骤的处理结果，供后续流程继续使用。
         """
         return cls.sanitize_payload(inputs)
 
     @classmethod
     def sanitize_trace_outputs(cls, outputs: Any) -> Any:
-        """sanitize_trace_outputs 方法。
-        
-        目的：执行当前步骤对应的处理逻辑。
+        """目的：执行当前步骤对应的处理逻辑。
         结果：返回当前步骤的处理结果，供后续流程继续使用。
         """
         return cls.sanitize_payload(outputs)
@@ -172,9 +163,7 @@ class TraceSanitizer:
         provider: str,
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """执行 request_metadata 方法。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         metadata = {
@@ -200,9 +189,7 @@ class TraceSanitizer:
         mcp_calls: list[Any],
         fallback_reason: str,
     ) -> dict[str, Any]:
-        """执行 response_metadata 方法。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         return {
@@ -216,16 +203,12 @@ class TraceSanitizer:
 
 
 class LangSmithService:
-    """统一封装 LangSmith 配置、Prompt 拉取和客户端包装。
-
-    目的：承载聚合后的业务能力，对外暴露稳定且清晰的调用入口。
+    """目的：承载聚合后的业务能力，对外暴露稳定且清晰的调用入口。
     结果：上层模块可以直接复用核心能力，减少重复编排并提升可维护性。
     """
 
     def __init__(self, settings: Settings | None = None) -> None:
-        """初始化 LangSmithService。
-        
-        目的：初始化LangSmithService所需的依赖、配置和初始状态。
+        """目的：初始化LangSmithService所需的依赖、配置和初始状态。
         结果：实例创建完成后可直接参与后续业务流程。
         """
         self.settings = settings or get_settings()
@@ -234,27 +217,21 @@ class LangSmithService:
 
     @property
     def package_available(self) -> bool:
-        """执行 package_available 方法。
-
-        目的：按需获取并返回目标配置或资源，避免重复构建。
+        """目的：按需获取并返回目标配置或资源，避免重复构建。
         结果：调用方可以拿到可直接使用的结果，简化后续处理。
         """
         return Client is not None
 
     @property
     def enabled(self) -> bool:
-        """执行 enabled 方法。
-
-        目的：按需获取并返回目标配置或资源，避免重复构建。
+        """目的：按需获取并返回目标配置或资源，避免重复构建。
         结果：调用方可以拿到可直接使用的结果，简化后续处理。
         """
         return bool(self.settings.langsmith_enabled)
 
     @property
     def tracing_enabled(self) -> bool:
-        """执行 tracing_enabled 方法。
-
-        目的：按需获取并返回目标配置或资源，避免重复构建。
+        """目的：按需获取并返回目标配置或资源，避免重复构建。
         结果：调用方可以拿到可直接使用的结果，简化后续处理。
         """
         return (
@@ -265,13 +242,13 @@ class LangSmithService:
 
     @property
     def privacy_mode(self) -> bool:
-        """返回是否启用 LangSmith 隐私模式。"""
+        """目的：集中读取隐私开关，决定 trace 输入输出是否需要脱敏。
+        结果：返回 True 表示启用脱敏。
+        """
         return bool(self.settings.langsmith_privacy_mode)
 
     def configure_environment(self) -> None:
-        """将 LangSmith 配置同步到环境变量，供 LangGraph / SDK 自动读取。
-
-        目的：按指定条件读取目标数据、资源或结果集合。
+        """目的：按指定条件读取目标数据、资源或结果集合。
         结果：返回可直接消费的查询结果，减少调用方重复处理。
         """
         mapping = {
@@ -290,21 +267,23 @@ class LangSmithService:
                 os.environ.pop(key, None)
 
     def process_trace_inputs(self, inputs: dict[str, Any]) -> dict[str, Any]:
-        """按隐私模式决定是否对 trace 输入做脱敏。"""
+        """目的：按隐私模式决定是否对 trace 输入做脱敏。
+        结果：返回原始输入或脱敏后的输入字典。
+        """
         if not self.privacy_mode:
             return inputs
         return TraceSanitizer.sanitize_trace_inputs(inputs)
 
     def process_trace_outputs(self, outputs: Any) -> Any:
-        """按隐私模式决定是否对 trace 输出做脱敏。"""
+        """目的：按隐私模式决定是否对 trace 输出做脱敏。
+        结果：返回原始输出或脱敏后的输出。
+        """
         if not self.privacy_mode:
             return outputs
         return TraceSanitizer.sanitize_trace_outputs(outputs)
 
     def get_client(self) -> Any | None:
-        """获取目标资源或配置。
-
-        目的：按指定条件读取目标数据、资源或结果集合。
+        """目的：按指定条件读取目标数据、资源或结果集合。
         结果：返回可直接消费的查询结果，减少调用方重复处理。
         """
         if not self.enabled or not self.package_available:
@@ -328,9 +307,7 @@ class LangSmithService:
             return None
 
     def tracing_scope(self) -> Any:
-        """执行 tracing_scope 方法。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         if tracing_context is None:
@@ -345,9 +322,7 @@ class LangSmithService:
         provider: str,
         stream: bool,
     ) -> list[str]:
-        """构建目标对象或结构。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         return [
@@ -370,9 +345,7 @@ class LangSmithService:
         provider: str,
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """构建目标对象或结构。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         return TraceSanitizer.request_metadata(
@@ -387,9 +360,7 @@ class LangSmithService:
         )
 
     def wrap_openai_client(self, client: Any) -> Any:
-        """执行 wrap_openai_client 方法。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         if client is None or wrap_openai is None or not self.tracing_enabled:
@@ -405,9 +376,7 @@ class LangSmithService:
             return client
 
     def pull_prompt(self, identifier: str) -> Any | None:
-        """执行 pull_prompt 方法。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         normalized = identifier.strip()
@@ -427,9 +396,7 @@ class LangSmithService:
             return None
 
     def maybe_json(self, value: Any) -> str:
-        """执行 maybe_json 方法。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         try:
@@ -439,12 +406,16 @@ class LangSmithService:
 
 
 def _process_trace_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
-    """traceable 装饰器输入处理入口。"""
+    """目的：把 LangSmith 装饰器的输入处理委托给全局服务。
+    结果：返回可上报的输入 payload。
+    """
     return get_langsmith_service().process_trace_inputs(inputs)
 
 
 def _process_trace_outputs(outputs: Any) -> Any:
-    """traceable 装饰器输出处理入口。"""
+    """目的：把 LangSmith 装饰器的输出处理委托给全局服务。
+    结果：返回可上报的输出 payload。
+    """
     return get_langsmith_service().process_trace_outputs(outputs)
 
 
@@ -454,9 +425,7 @@ def traceable_chain(
     run_type: str = "chain",
     reduce_fn: Callable[[list[Any]], Any] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """traceable_chain 方法。
-    
-    目的：执行traceable_chain 方法相关逻辑。
+    """目的：执行traceable_chain 方法相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     if traceable is None:
@@ -472,9 +441,7 @@ def traceable_chain(
 
 
 def traceable_tool(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """traceable_tool 方法。
-    
-    目的：执行traceable_tool 方法相关逻辑。
+    """目的：执行traceable_tool 方法相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     return traceable_chain(name, run_type="tool")
@@ -482,9 +449,7 @@ def traceable_tool(name: str) -> Callable[[Callable[..., Any]], Callable[..., An
 
 @lru_cache(maxsize=1)
 def get_langsmith_service() -> LangSmithService:
-    """get_langsmith_service 方法。
-    
-    目的：获取get_langsmith_service 。
+    """目的：获取get_langsmith_service 。
     结果：返回当前流程需要的对象、配置或查询结果。
     """
     return LangSmithService()

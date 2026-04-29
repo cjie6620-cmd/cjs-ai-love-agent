@@ -11,9 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def build_llm_provider(settings: Settings) -> LlmProvider:
-    """根据配置构建具体 Provider。
-    
-    目的：构建根据配置构建具体 Provider所需的数据或对象。
+    """目的：构建根据配置构建具体 Provider所需的数据或对象。
     结果：返回后续流程可直接消费的构建结果。
     """
     from llm.providers.openai_remote import DeepseekMcpProvider
@@ -28,9 +26,7 @@ def build_llm_provider(settings: Settings) -> LlmProvider:
 
 
 def build_memory_llm_provider(settings: Settings) -> LlmProvider:
-    """构建长期记忆后台分析 Provider。
-
-    目的：让长期记忆结构化分析固定使用 DeepSeek，避免与主聊天模型耦合。
+    """目的：让长期记忆结构化分析固定使用 DeepSeek，避免与主聊天模型耦合。
     结果：返回支持 with_structured_output 的 DeepseekMcpProvider 实例。
     """
     from llm.providers.openai_remote import DeepseekMcpProvider

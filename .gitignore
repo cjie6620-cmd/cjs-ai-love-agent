@@ -12,6 +12,7 @@ htmlcov/
 
 # Virtual environments
 .venv/
+.venv-wsl/
 venv/
 env/
 
@@ -62,6 +63,7 @@ data/
 # Agent runtime artifacts
 .agents/
 .codex/
+.playwright-cli/
 .mcp.json
 .cursor/mcp.json
 .mcp-node/

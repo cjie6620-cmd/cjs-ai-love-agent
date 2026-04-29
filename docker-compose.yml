@@ -1,10 +1,130 @@
+x-memory-task-environment: &memory-task-environment
+  APP_ENV: ${APP_ENV:-prod}
+  DEBUG: ${DEBUG:-false}
+  MYSQL_URL: ${MYSQL_URL_DOCKER:?MYSQL_URL_DOCKER is required}
+  REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
+  VECTOR_DB_URL: postgresql+psycopg://ai_love:${PGVECTOR_PASSWORD:-change-me}@postgres:5432/ai_love_vector
+  ROCKETMQ_NAMESRV_ADDR: rocketmq-namesrv:9876
+  ROCKETMQ_PRODUCER_GROUP: ${ROCKETMQ_PRODUCER_GROUP:-ai_love_memory_producer}
+  ROCKETMQ_MEMORY_TOPIC: ${ROCKETMQ_MEMORY_TOPIC:-ai_love_memory_extraction}
+  ROCKETMQ_MEMORY_TAG: ${ROCKETMQ_MEMORY_TAG:-memory.extract.v1}
+  ROCKETMQ_MEMORY_CONSUMER_GROUP: ${ROCKETMQ_MEMORY_CONSUMER_GROUP:-ai_love_memory_consumer}
+  ROCKETMQ_SEND_TIMEOUT_MS: ${ROCKETMQ_SEND_TIMEOUT_MS:-3000}
+  ROCKETMQ_MAX_RECONSUME_TIMES: ${ROCKETMQ_MAX_RECONSUME_TIMES:-16}
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+  DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+  DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+  LLM_PROVIDER: ${LLM_PROVIDER:-xai_router}
+  LLM_BASE_URL: ${LLM_BASE_URL:-https://api.xairouter.com/v1}
+  LLM_MODEL: ${LLM_MODEL:-gpt-5.4}
+  XAI_API_KEY: ${XAI_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  TOKENIZER_BACKEND: ${TOKENIZER_BACKEND:-auto}
+  HF_TOKENIZER_REPO: ${HF_TOKENIZER_REPO:-}
+  VECTOR_DIMENSION: ${VECTOR_DIMENSION:-1536}
+  LANGSMITH_ENABLED: ${LANGSMITH_ENABLED:-false}
+  LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+  LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+  LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-}
+  LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-}
+  LANGSMITH_PRIVACY_MODE: ${LANGSMITH_PRIVACY_MODE:-true}
+  ES_HOSTS: http://elasticsearch:9200
+  ES_INDEX: ${ES_INDEX:-knowledge_chunks}
+  ES_USERNAME: ${ES_USERNAME:-elastic}
+  ES_PASSWORD: ${ES_PASSWORD:-change-me}
+  ES_TIMEOUT_MS: ${ES_TIMEOUT_MS:-5000}
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-change-me}
+  MINIO_BUCKET: ${MINIO_BUCKET:-ai-love}
+  RERANK_SERVICE_URL: http://reranker-api:8001
+  RERANK_API_KEY: ${RERANK_API_KEY:-}
+  RERANK_TIMEOUT_MS: ${RERANK_TIMEOUT_MS:-5000}
+  RESPONSE_CACHE_ENABLED: ${RESPONSE_CACHE_ENABLED:-true}
+  RESPONSE_CACHE_EXACT_TTL_SECONDS: ${RESPONSE_CACHE_EXACT_TTL_SECONDS:-600}
+  RESPONSE_CACHE_SEMANTIC_TTL_SECONDS: ${RESPONSE_CACHE_SEMANTIC_TTL_SECONDS:-1800}
+  RESPONSE_CACHE_SEMANTIC_THRESHOLD: ${RESPONSE_CACHE_SEMANTIC_THRESHOLD:-0.94}
+  RESPONSE_CACHE_VERSION: ${RESPONSE_CACHE_VERSION:-chat_response_cache.v1}
+  MCP_AMAP_ENABLED: ${MCP_AMAP_ENABLED:-false}
+  MCP_TRANSPORT: ${MCP_TRANSPORT:-streamable_http}
+  AMAP_MAPS_API_KEY: ${AMAP_MAPS_API_KEY:-}
+  AMAP_MCP_URL: http://mcp-amap:3100/mcp
+  AMAP_MCP_HEADERS_JSON: ${AMAP_MCP_HEADERS_JSON:-}
+
+x-memory-task-common: &memory-task-common
+  build:
+    context: .
+    dockerfile: docker/memory-tasks/Dockerfile
+  env_file:
+    - .env
+  environment: *memory-task-environment
+  restart: unless-stopped
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+    rocketmq-init:
+      condition: service_completed_successfully
+
 services:
+  mysql:
+    image: mysql:8.4
+    container_name: ai-love-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ai_love}
+      MYSQL_USER: ${MYSQL_USER:-ai_love}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/mysql_init.sql:/docker-entrypoint-initdb.d/20-mysql_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: ai-love-redis
+    restart: unless-stopped
+    command: sh -c "redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}"
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  memory-consumer:
+    <<: *memory-task-common
+    container_name: ai-love-memory-consumer
+    command: python -m agents.memory_consumer
+
+  memory-outbox-relay:
+    <<: *memory-task-common
+    container_name: ai-love-memory-outbox-relay
+    command: sh -c "while true; do python -m agents.memory_outbox_relay; sleep ${MEMORY_OUTBOX_RELAY_INTERVAL_SECONDS:-30}; done"
+
   elasticsearch:
     build:
       context: .
       dockerfile: docker/elasticsearch/Dockerfile
-      args:
-        ES_VERSION: 8.12.2
+    image: ${ELASTICSEARCH_IMAGE:-ai-love-elasticsearch:latest}
     container_name: ai-love-es
     restart: unless-stopped
     environment:
@@ -102,9 +222,10 @@ services:
       POSTGRES_USER: ai_love
       POSTGRES_PASSWORD: ${PGVECTOR_PASSWORD:-change-me}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgvector_data:/var/lib/postgresql/data
+      - ./sql/pgvector_schema.sql:/docker-entrypoint-initdb.d/20-pgvector_schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ai_love -d ai_love_vector"]
       interval: 10s
@@ -175,6 +296,23 @@ services:
       - rocketmq_broker_logs:/home/rocketmq/logs
       - rocketmq_broker_store:/home/rocketmq/store
 
+  rocketmq-init:
+    image: apache/rocketmq:5.3.1
+    container_name: ai-love-rocketmq-init
+    restart: "no"
+    depends_on:
+      - rocketmq-namesrv
+      - rocketmq-broker
+    command:
+      - sh
+      - -c
+      - >
+        for i in $$(seq 1 20); do
+          /home/rocketmq/rocketmq-5.3.1/bin/mqadmin updateTopic -n rocketmq-namesrv:9876 -c ai-love-rocketmq-cluster -t ${ROCKETMQ_MEMORY_TOPIC:-ai_love_memory_extraction} && exit 0;
+          sleep 3;
+        done;
+        exit 1
+
   rocketmq-dashboard:
     image: apacherocketmq/rocketmq-dashboard:latest
     container_name: ai-love-rocketmq-dashboard
@@ -203,10 +341,12 @@ services:
       test: ["CMD", "node", "healthcheck.js"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 20s
 
 volumes:
+  mysql_data:
+  redis_data:
   es_data:
   pgvector_data:
   minio_data:

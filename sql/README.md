@@ -10,13 +10,13 @@
 
 - `mysql_init.sql`
   作用：MySQL 初始化脚本。
-  功能：创建 `ai_love` 数据库、账号授权和核心业务表。
+  功能：创建核心业务表，包括 `users`、`auth_accounts`、`auth_refresh_tokens`、会话表、安全事件表、`user_memory_settings` 和 `memory_event_outbox`。
 - `pgvector_init.sql`
   作用：PostgreSQL / pgvector bootstrap 脚本。
   功能：创建 `ai_love_vector` 数据库和 `ai_love` 账号。
 - `pgvector_schema.sql`
   作用：PostgreSQL / pgvector 表结构脚本。
-  功能：创建 `vector` 扩展、业务向量表和索引结构。
+  功能：创建 `vector` 扩展、业务向量表、长期记忆 active 去重约束和索引结构。
 - `README.md`
   作用：SQL 目录说明文档。
   功能：解释脚本用途、执行方式和维护规范。
@@ -27,6 +27,12 @@
 
 ```bash
 mysql -uroot -p < sql/mysql_init.sql
+```
+
+PowerShell 下推荐使用管道方式：
+
+```powershell
+Get-Content sql\mysql_init.sql | mysql -h 127.0.0.1 -P 3307 -u root -p
 ```
 
 ### PostgreSQL / pgvector
@@ -44,6 +50,7 @@ psql -U ai_love -d ai_love_vector -f sql/pgvector_schema.sql
 ## 4. 依赖边界
 
 - SQL 脚本与 `persistence`、`rag/vector_store` 的表结构保持一致。
+- `mysql_init.sql` 必须与 `persistence/models.py`、`persistence/*_repository.py` 保持一致。
 - 运行时模块不直接依赖本目录文件，但部署和初始化过程依赖本目录内容。
 - 表结构变更要同时更新 ORM、仓储、SQL 与文档。
 
@@ -53,6 +60,7 @@ psql -U ai_love -d ai_love_vector -f sql/pgvector_schema.sql
 - 建库、建表、授权、扩展安装要清晰分段。
 - 默认账号、库名、表结构要与 `.env.example` 和代码约定保持一致。
 - 任何表结构变更都要有对应文档说明，避免只改代码不改 SQL。
+- 已有数据库升级时，`CREATE TABLE IF NOT EXISTS` 只会补新表，不会自动改旧字段；字段级变更需要单独迁移脚本。
 
 ## 6. 维护要求
 

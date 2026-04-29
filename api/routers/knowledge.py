@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, Request, UploadFile
 
 from api.deps import get_container
+from contracts.common import ApiResponse, success_response
 from contracts.rag import (
     KnowledgeBatchIndexResponse,
     KnowledgeIndexResponse,
@@ -32,16 +33,14 @@ _CONTENT_TYPE_MAP = {
 }
 
 
-@router.post("/files", response_model=KnowledgeIndexResponse)
+@router.post("/files", response_model=ApiResponse[KnowledgeIndexResponse])
 async def upload_knowledge(
     request: Request,
     file: UploadFile = File(..., description="待索引的知识文件"),
     category: str = Form(default="relationship_knowledge"),
     source: str = Form(default=""),
-) -> KnowledgeIndexResponse:
-    """上传知识文件并索引。
-    
-    目的：执行上传知识文件并索引相关逻辑。
+) -> ApiResponse[KnowledgeIndexResponse]:
+    """目的：执行上传知识文件并索引相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     data = await file.read()
@@ -52,56 +51,54 @@ async def upload_knowledge(
     container = get_container(request)
     minio_client: MinioClient = container.minio_client
     minio_client.upload_file(data, filename, content_type=content_type, prefix="knowledge")
-    return await container.rag_service.index_file(
+    result = await container.rag_service.index_file(
         data,
         filename,
         category=category,
         source=source or f"upload:{filename}",
     )
+    return success_response(result)
 
 
-@router.post("/text", response_model=KnowledgeIndexResponse)
+@router.post("/text", response_model=ApiResponse[KnowledgeIndexResponse])
 async def index_knowledge_text(
     request_body: KnowledgeIndexTextRequest,
     request: Request,
-) -> KnowledgeIndexResponse:
-    """直接索引文本。
-    
-    目的：执行直接索引文本相关逻辑。
+) -> ApiResponse[KnowledgeIndexResponse]:
+    """目的：执行直接索引文本相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     container = get_container(request)
-    return await container.rag_service.index_text(request_body)
+    result = await container.rag_service.index_text(request_body)
+    return success_response(result)
 
 
-@router.post("/reindex", response_model=KnowledgeBatchIndexResponse)
+@router.post("/reindex", response_model=ApiResponse[KnowledgeBatchIndexResponse])
 async def reindex_knowledge(
     request: Request,
     category: str = "relationship_knowledge",
-) -> KnowledgeBatchIndexResponse:
-    """重建内置知识库索引。
-    
-    目的：执行重建内置知识库索引相关逻辑。
+) -> ApiResponse[KnowledgeBatchIndexResponse]:
+    """目的：执行重建内置知识库索引相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     knowledge_dir = Path(__file__).resolve().parents[2] / "docs" / "knowledge_base"
     container = get_container(request)
-    return await container.rag_service.index_knowledge_directory(
+    result = await container.rag_service.index_knowledge_directory(
         knowledge_dir,
         category=category,
         source="builtin:knowledge_base",
     )
+    return success_response(result)
 
 
-@router.post("/search", response_model=KnowledgeSearchResponse)
+@router.post("/search", response_model=ApiResponse[KnowledgeSearchResponse])
 async def search_knowledge(
     request_body: KnowledgeSearchRequest,
     request: Request,
-) -> KnowledgeSearchResponse:
-    """搜索知识库。
-    
-    目的：执行搜索知识库相关逻辑。
+) -> ApiResponse[KnowledgeSearchResponse]:
+    """目的：执行搜索知识库相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     container = get_container(request)
-    return await container.rag_service.search(request_body)
+    result = await container.rag_service.search(request_body)
+    return success_response(result)

@@ -19,16 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 class PromptRepository:
-    """优先从 LangSmith 拉取 Prompt，失败时回退本地 PromptSpec。
-
-    目的：封装持久化读写逻辑，隔离数据库访问细节和查询实现。
+    """目的：封装持久化读写逻辑，隔离数据库访问细节和查询实现。
     结果：业务层可以通过统一仓储接口完成数据操作，降低存储实现耦合。
     """
 
     def __init__(self) -> None:
-        """初始化 PromptRepository。
-        
-        目的：初始化PromptRepository所需的依赖、配置和初始状态。
+        """目的：初始化PromptRepository所需的依赖、配置和初始状态。
         结果：实例创建完成后可直接参与后续业务流程。
         """
         self._langsmith = get_langsmith_service()
@@ -40,9 +36,7 @@ class PromptRepository:
         fallback_spec: PromptSpec,
         variables: dict[str, Any],
     ) -> PromptSpec:
-        """解析 PromptSpec，优先从 LangSmith 拉取。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         prompt_obj = self._langsmith.pull_prompt(prompt_identifier)
@@ -70,9 +64,7 @@ class PromptRepository:
         prompt_obj: Any,
         variables: dict[str, Any],
     ) -> dict[str, str] | None:
-        """渲染 LangSmith Prompt 对象为 system/user 消息字典。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         try:
@@ -104,9 +96,7 @@ class PromptRepository:
         }
 
     def _extract_message_content(self, message: Any) -> str:
-        """从消息对象中提取文本内容。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         content = getattr(message, "content", "")

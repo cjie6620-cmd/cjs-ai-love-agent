@@ -1,9 +1,14 @@
-"""应用启动阶段的基础设施探活。"""
+"""应用启动阶段的基础设施探活。
+
+目的：在应用启动时检查数据库、缓存、消息队列、向量库和外部服务是否可用。
+结果：输出统一的探活结果，方便本地排障和部署环境健康观测。
+"""
 
 from __future__ import annotations
 
 import logging
 import re
+import socket
 from dataclasses import dataclass
 
 import httpx
@@ -28,18 +33,34 @@ _VECTOR_REQUIRED_TABLES = (
 
 @dataclass(slots=True)
 class StartupProbeResult:
-    """单个基础设施启动检查结果。"""
+    """目的：承载某个依赖的探活名称、状态、端点和诊断详情。
+    结果：日志、健康接口和测试可以复用同一份结果结构。
+    """
 
+    # 目的：保存 name 字段，用于 StartupProbeResult 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 name 值。
     name: str
+    # 目的：保存 ok 字段，用于 StartupProbeResult 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 ok 值。
     ok: bool
+    # 目的：保存 endpoint 字段，用于 StartupProbeResult 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 endpoint 值。
     endpoint: str
+    # 目的：保存 detail 字段，用于 StartupProbeResult 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 detail 值。
     detail: str
 
     @property
     def status(self) -> str:
+        """目的：把布尔状态转换成接口和日志更易读的状态字符串。
+        结果：成功返回 ok，失败返回 fail。
+        """
         return "ok" if self.ok else "fail"
 
     def to_dict(self) -> dict[str, str]:
+        """目的：把 dataclass 结果序列化为 API 可直接返回的结构。
+        结果：返回包含 name、status、endpoint、detail 的字典。
+        """
         return {
             "name": self.name,
             "status": self.status,
@@ -49,21 +70,31 @@ class StartupProbeResult:
 
 
 def _mask_url(url: str) -> str:
-    """脱敏 URL 中的密码，避免日志泄露敏感信息。"""
+    """目的：避免启动日志泄露数据库、Redis 等连接串里的敏感信息。
+    结果：返回密码被替换为星号的 URL。
+    """
     return re.sub(r"(://[^@]*:)[^@]*(@)", r"\1***\2", url)
 
 
 def _build_result(name: str, ok: bool, endpoint: str, detail: str) -> StartupProbeResult:
+    """目的：减少各探针重复组装 StartupProbeResult 的代码。
+    结果：返回字段完整的 StartupProbeResult。
+    """
     return StartupProbeResult(name=name, ok=ok, endpoint=endpoint, detail=detail)
 
 
 def _format_exception(exc: Exception) -> str:
+    """目的：把异常类型和消息压缩成适合日志展示的诊断文本。
+    结果：返回非空的异常说明字符串。
+    """
     message = str(exc).strip()
     return f"{exc.__class__.__name__}: {message}" if message else exc.__class__.__name__
 
 
 def probe_mysql(settings: Settings | None = None) -> StartupProbeResult:
-    """检查 MySQL 连通性。"""
+    """目的：验证主业务数据库是否可以建立连接并执行轻量 SQL。
+    结果：返回 MySQL 探活成功或失败的统一结果。
+    """
     resolved_settings = settings or get_settings()
     endpoint = _mask_url(resolved_settings.mysql_url)
     try:
@@ -78,7 +109,9 @@ def probe_mysql(settings: Settings | None = None) -> StartupProbeResult:
 
 
 def probe_redis(settings: Settings | None = None) -> StartupProbeResult:
-    """检查 Redis 连通性。"""
+    """目的：验证缓存和限流依赖是否可以连接并响应 PING。
+    结果：返回 Redis 探活成功或失败的统一结果。
+    """
     resolved_settings = settings or get_settings()
     endpoint = _mask_url(resolved_settings.redis_url)
     try:
@@ -95,7 +128,9 @@ def probe_redis(settings: Settings | None = None) -> StartupProbeResult:
 
 
 def probe_celery_worker(settings: Settings | None = None) -> StartupProbeResult:
-    """检查 Celery worker 是否在线，避免记忆任务只入队不执行。"""
+    """目的：确认后台任务 worker 已连接，避免记忆任务只入队不执行。
+    结果：返回 worker 在线列表或失败原因。
+    """
     resolved_settings = settings or get_settings()
     endpoint = _mask_url(resolved_settings.redis_url)
     try:
@@ -111,26 +146,29 @@ def probe_celery_worker(settings: Settings | None = None) -> StartupProbeResult:
 
 
 def probe_rocketmq(settings: Settings | None = None) -> StartupProbeResult:
-    """检查 RocketMQ NameServer 配置与客户端依赖。"""
+    """目的：用 TCP 连接探测替代 Windows 下不可用的 RocketMQ SDK 初始化。
+    结果：返回 NameServer 是否可达和长期记忆 topic 诊断信息。
+    """
     resolved_settings = settings or get_settings()
     endpoint = resolved_settings.rocketmq_namesrv_addr
     try:
-        from rocketmq.client import Producer
-
-        producer = Producer(f"{resolved_settings.rocketmq_producer_group}_probe")
-        producer.set_name_server_address(endpoint)
+        host, port_text = endpoint.rsplit(":", 1)
+        with socket.create_connection((host, int(port_text)), timeout=3):
+            pass
         return _build_result(
             "RocketMQ",
             True,
             endpoint,
-            f"客户端可用，topic={resolved_settings.rocketmq_memory_topic}",
+            f"NameServer TCP 连接成功，topic={resolved_settings.rocketmq_memory_topic}",
         )
     except Exception as exc:
         return _build_result("RocketMQ", False, endpoint, _format_exception(exc))
 
 
 def probe_vector_db(settings: Settings | None = None) -> StartupProbeResult:
-    """检查 pgvector 数据库连通性与扩展可用性。"""
+    """目的：验证向量数据库、vector 扩展和关键业务向量表是否就绪。
+    结果：返回 VectorDB 探活结果和缺失表详情。
+    """
     resolved_settings = settings or get_settings()
     endpoint = _mask_url(resolved_settings.vector_db_url)
     try:
@@ -172,7 +210,9 @@ def probe_vector_db(settings: Settings | None = None) -> StartupProbeResult:
 
 
 async def probe_amap_mcp(settings: Settings | None = None) -> StartupProbeResult:
-    """检查高德 MCP 是否可握手并成功返回工具列表。"""
+    """目的：验证 MCP transport、鉴权头和远端工具列表是否可用。
+    结果：返回 AmapMCP 探活结果和工具数量或失败原因。
+    """
     resolved_settings = settings or get_settings()
     endpoint = resolved_settings.amap_mcp_url.rstrip("/") if resolved_settings.amap_mcp_url else "-"
     if resolved_settings.mcp_transport != "streamable_http":
@@ -205,7 +245,9 @@ async def probe_amap_mcp(settings: Settings | None = None) -> StartupProbeResult
 
 
 def probe_minio(settings: Settings | None = None) -> StartupProbeResult:
-    """检查 MinIO 连通性，并确保 bucket 存在。"""
+    """目的：验证对象存储可达，并在 bucket 缺失时完成最小初始化。
+    结果：返回 MinIO 探活结果和 bucket 可用状态。
+    """
     resolved_settings = settings or get_settings()
     endpoint = resolved_settings.minio_endpoint
     bucket = resolved_settings.minio_bucket
@@ -233,7 +275,9 @@ def probe_minio(settings: Settings | None = None) -> StartupProbeResult:
 
 
 async def probe_elasticsearch(settings: Settings | None = None) -> StartupProbeResult:
-    """检查 Elasticsearch 连通性。"""
+    """目的：验证 BM25 召回依赖的 Elasticsearch 集群健康接口是否可用。
+    结果：返回 Elasticsearch 探活结果、集群状态和集群名称。
+    """
     resolved_settings = settings or get_settings()
     endpoint = (
         resolved_settings.es_host_list[0]
@@ -264,7 +308,9 @@ async def probe_elasticsearch(settings: Settings | None = None) -> StartupProbeR
 
 
 async def probe_reranker(settings: Settings | None = None) -> StartupProbeResult:
-    """检查独立重排服务连通性。"""
+    """目的：验证混合检索精排依赖的 reranker-api 健康接口是否可用。
+    结果：返回 Reranker 探活结果和健康状态。
+    """
     resolved_settings = settings or get_settings()
     endpoint = resolved_settings.rerank_service_url.rstrip("/")
     headers: dict[str, str] = {}
@@ -290,6 +336,9 @@ async def probe_reranker(settings: Settings | None = None) -> StartupProbeResult
 
 
 def _log_probe_result(result: StartupProbeResult) -> None:
+    """目的：按成功或失败选择日志级别，并保持启动检查日志格式一致。
+    结果：输出一条包含依赖名、状态、端点和详情的日志。
+    """
     level = logger.info if result.ok else logger.warning
     level(
         "[启动检查] %s | %s | endpoint=%s | detail=%s",
@@ -301,18 +350,21 @@ def _log_probe_result(result: StartupProbeResult) -> None:
 
 
 async def run_startup_probes(settings: Settings | None = None) -> list[StartupProbeResult]:
-    """执行所有基础设施启动检查，并输出汇总日志。"""
+    """目的：按配置串行运行核心依赖探针，并补充可选 Celery/MCP 探针。
+    结果：返回所有探活结果，同时输出成功数和失败项汇总。
+    """
     resolved_settings = settings or get_settings()
     results = [
         probe_mysql(resolved_settings),
         probe_redis(resolved_settings),
-        probe_celery_worker(resolved_settings),
         probe_rocketmq(resolved_settings),
         probe_vector_db(resolved_settings),
         await probe_elasticsearch(resolved_settings),
         await probe_reranker(resolved_settings),
         probe_minio(resolved_settings),
     ]
+    if resolved_settings.celery_worker_probe_enabled:
+        results.append(probe_celery_worker(resolved_settings))
     if resolved_settings.mcp_amap_enabled:
         results.append(await probe_amap_mcp(resolved_settings))
 

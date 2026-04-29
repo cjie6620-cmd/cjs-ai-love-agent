@@ -1,4 +1,8 @@
-"""知识库管理服务：封装索引管道和混合检索器。"""
+"""知识库管理服务：封装索引管道和混合检索器。
+
+目的：为 API 层提供知识索引、批量建库和混合检索的统一业务入口。
+结果：路由层不需要直接依赖底层 pgvector、Elasticsearch 和 rerank 细节。
+"""
 
 from __future__ import annotations
 
@@ -24,9 +28,14 @@ logger = logging.getLogger(__name__)
 
 
 class RagService:
-    """知识库管理服务，提供文件索引、文本索引、检索三大能力。"""
+    """目的：组合索引管道、向量客户端、关键词召回器和混合检索器。
+    结果：对外提供文件索引、文本索引、目录索引和检索能力。
+    """
 
     def __init__(self) -> None:
+        """目的：创建共享的向量客户端和关键词召回器，并组装索引与检索链路。
+        结果：实例可直接服务知识库写入和查询请求。
+        """
         self._vector_client = PgVectorClient()
         self._lexical_retriever = LexicalRetriever()
         self._pipeline = IngestionPipeline(
@@ -44,8 +53,13 @@ class RagService:
         filename: str,
         category: str = "relationship_knowledge",
         source: str = "",
+        tenant_id: str = "default",
+        created_by: str = "",
+        document_id: str = "",
     ) -> KnowledgeIndexResponse:
-        """索引单个文件。"""
+        """目的：按稳定 doc_id 清理旧索引后，将文件内容重新写入知识库。
+        结果：返回索引是否成功、写入 chunk 数和用户可读消息。
+        """
         try:
             normalized_source = source or f"file:{filename}"
             doc_id = self._pipeline._build_doc_id(  # noqa: SLF001 - 服务层需要与 pipeline 保持同一 doc_id 规则
@@ -55,6 +69,9 @@ class RagService:
                     "source": normalized_source,
                     "category": category,
                     "title": filename,
+                    "tenant_id": tenant_id,
+                    "created_by": created_by,
+                    "document_id": document_id,
                 },
             )
             deleted = await self._replace_existing_document(
@@ -62,12 +79,16 @@ class RagService:
                 category=category,
                 source=normalized_source,
                 doc_id=doc_id,
+                tenant_id=tenant_id,
             )
             written = await self._pipeline.ingest_file(
                 data,
                 filename,
                 category=category,
                 source=normalized_source,
+                tenant_id=tenant_id,
+                created_by=created_by,
+                document_id=document_id,
             )
             logger.info(
                 "文件索引完成: filename=%s, source=%s, deleted=%d, written=%d",
@@ -91,8 +112,17 @@ class RagService:
                 message=f"索引失败: {exc}",
             )
 
-    async def index_text(self, request: KnowledgeIndexTextRequest) -> KnowledgeIndexResponse:
-        """从纯文本直接索引入库。"""
+    async def index_text(
+        self,
+        request: KnowledgeIndexTextRequest,
+        *,
+        tenant_id: str = "default",
+        created_by: str = "",
+        document_id: str = "",
+    ) -> KnowledgeIndexResponse:
+        """目的：支持不经过文件上传的文本知识写入和重建。
+        结果：返回索引是否成功、写入 chunk 数和用户可读消息。
+        """
         try:
             doc_id = self._pipeline._build_doc_id(  # noqa: SLF001
                 title=request.title,
@@ -100,6 +130,9 @@ class RagService:
                     "title": request.title,
                     "source": request.source,
                     "category": request.category,
+                    "tenant_id": tenant_id,
+                    "created_by": created_by,
+                    "document_id": document_id,
                 },
             )
             await self._replace_existing_document(
@@ -107,12 +140,16 @@ class RagService:
                 category=request.category,
                 source=request.source,
                 doc_id=doc_id,
+                tenant_id=tenant_id,
             )
             written = await self._pipeline.ingest_text(
                 request.text,
                 title=request.title,
                 category=request.category,
                 source=request.source,
+                tenant_id=tenant_id,
+                created_by=created_by,
+                document_id=document_id,
             )
             return KnowledgeIndexResponse(
                 success=True,
@@ -134,8 +171,13 @@ class RagService:
         directory: str | Path,
         category: str = "relationship_knowledge",
         source: str = "",
+        tenant_id: str = "default",
+        created_by: str = "",
+        document_id: str = "",
     ) -> KnowledgeBatchIndexResponse:
-        """批量索引指定目录下所有支持的文件。"""
+        """目的：遍历知识目录并逐个调用文件索引入口。
+        结果：返回文件总数、写入 chunk 总数和每个文件的索引结果。
+        """
         dir_path = Path(directory)
         if not dir_path.is_dir():
             return KnowledgeBatchIndexResponse(
@@ -161,6 +203,9 @@ class RagService:
                 file_path.name,
                 category=category,
                 source=source or str(dir_path),
+                tenant_id=tenant_id,
+                created_by=created_by,
+                document_id=document_id,
             )
             results.append(result)
             total_chunks += result.chunks_written
@@ -180,12 +225,20 @@ class RagService:
             message=f"共 {len(files)} 个文件，成功 {success_count} 个，写入 {total_chunks} 个 chunk",
         )
 
-    async def search(self, request: KnowledgeSearchRequest) -> KnowledgeSearchResponse:
-        """混合检索知识库。"""
+    async def search(
+        self,
+        request: KnowledgeSearchRequest,
+        *,
+        tenant_id: str = "default",
+    ) -> KnowledgeSearchResponse:
+        """目的：调用 HybridRetriever 完成向量、BM25、RRF 和 rerank 检索流程。
+        结果：返回 API 契约中的检索结果列表和总数。
+        """
         response = await self._retriever.search_with_context(
             [request.query],
             top_k=request.top_k,
             category=request.category,
+            tenant_id=tenant_id,
         )
         items = [
             KnowledgeSearchResultItem(
@@ -218,12 +271,17 @@ class RagService:
         category: str,
         filename: str,
         doc_id: str,
+        tenant_id: str = "default",
     ) -> int:
+        """目的：把服务层清理动作转发给 ES 关键词召回器。
+        结果：返回 ES 删除的文档数量。
+        """
         return await self._lexical_retriever.delete_document(
             source=source,
             category=category,
             filename=filename or None,
             doc_id=doc_id or None,
+            tenant_id=tenant_id,
         )
 
     async def _replace_existing_document(
@@ -233,8 +291,11 @@ class RagService:
         category: str,
         source: str,
         doc_id: str,
+        tenant_id: str = "default",
     ) -> int:
-        """在重建单个文档索引前先清理旧数据。"""
+        """目的：避免同一文档重复写入 pgvector 和 ES，保证重建结果可预期。
+        结果：返回向量库删除数量，ES 删除失败只记录日志并继续重建。
+        """
         if not source:
             return 0
         deleted = self._vector_client.delete_knowledge(
@@ -242,6 +303,7 @@ class RagService:
             category=category,
             filename=filename or None,
             doc_id=doc_id or None,
+            tenant_id=tenant_id,
         )
         try:
             await self._delete_lexical_document(
@@ -249,6 +311,7 @@ class RagService:
                 category=category,
                 filename=filename,
                 doc_id=doc_id,
+                tenant_id=tenant_id,
             )
         except Exception as exc:
             logger.warning("ES 预删除失败，继续后续重建: %s", exc)

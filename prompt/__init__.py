@@ -12,12 +12,7 @@ from .contracts import PromptSection, PromptSpec
 DEFAULT_KNOWLEDGE_CATEGORY = "relationship_knowledge"
 
 def build_rag_summary_prompt(title: str, chunk_count: int) -> str:
-    """
-    构建知识文档摘要提示词。
-
-    目的：生成用于告知 AI 知识文档已处理的提示词，
-    使模型在后续检索时能够优先返回高相关片段。
-
+    """目的：生成用于告知 AI 知识文档已处理的提示词，
     结果：返回格式化的提示词字符串，包含知识文档标题和片段数量信息。
     """
     return f"知识文档《{title}》已拆分为 {chunk_count} 个片段，后续检索优先返回高相关片段。"

@@ -5,7 +5,20 @@
 """
 
 from .api_key import ApiKeyMiddleware
+from .auth import AuthService, CurrentUser, TokenPair
 from .guardrails import SafetyGuard
+from .guest_quota import GuestQuotaResult, GuestQuotaService
 from .rate_limit import RedisService
+from .redis_client import RedisClient
 
-__all__ = ["ApiKeyMiddleware", "RedisService", "SafetyGuard"]
+__all__ = [
+    "ApiKeyMiddleware",
+    "AuthService",
+    "CurrentUser",
+    "GuestQuotaResult",
+    "GuestQuotaService",
+    "RedisService",
+    "RedisClient",
+    "SafetyGuard",
+    "TokenPair",
+]

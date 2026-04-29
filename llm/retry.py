@@ -13,9 +13,7 @@ async def async_retry_call(
     retries: int = 3,
     base_delay: float = 0.5,
 ) -> T:
-    """带重试机制的异步函数调用。
-
-    目的：在网络波动或临时故障时自动重试，提高系统容错能力。
+    """目的：在网络波动或临时故障时自动重试，提高系统容错能力。
     结果：成功时返回函数结果，失败时抛出最后一次异常。
     """
     last_error: Exception | None = None

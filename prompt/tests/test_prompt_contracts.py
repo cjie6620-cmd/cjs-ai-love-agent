@@ -1,3 +1,4 @@
+from contracts.chat import ConversationContext, ConversationHistoryMessage, SessionSummary
 from prompt.templates import (
     build_chat_reply_prompt_spec,
     build_memory_decision_prompt_spec,
@@ -7,12 +8,18 @@ from prompt.templates import (
 
 def test_chat_prompt_spec_renders_plain_text_contract() -> None:
     """普通聊天 prompt 应明确要求纯文本输出。"""
+    context = ConversationContext(
+        session_summary=SessionSummary(summary_text="用户刚分手，容易冲动联系前任。"),
+        recent_messages=[
+            ConversationHistoryMessage(id="m1", role="user", content="刚分手两天"),
+        ],
+    )
     spec = build_chat_reply_prompt_spec(
         mode="advice",
         safety_level="medium",
         llm_provider="xai_router",
         message="我现在总想给前任发消息",
-        recent_messages=[{"role": "user", "content": "刚分手两天"}],
+        conversation_context=context,
         memory_hits=[{"content": "用户容易冲动联系前任", "score": 0.92, "chunk_id": "m-1"}],
         knowledge_hits=["分手初期建议先降温，不要立即高频联系。"],
         knowledge_evidences=[
@@ -54,12 +61,17 @@ def test_chat_prompt_spec_renders_plain_text_contract() -> None:
 
 def test_tool_final_prompt_spec_renders_structured_field_guide() -> None:
     """工具终结 prompt 应保留 structured field guide，但不再要求模型手写 JSON。"""
+    context = ConversationContext(
+        recent_messages=[
+            ConversationHistoryMessage(id="m1", role="user", content="我要出门"),
+        ],
+    )
     spec = build_tool_final_reply_prompt_spec(
         mode="advice",
         safety_level="low",
         llm_provider="openai_remote_mcp",
         message="帮我看看今天北京天气怎么样",
-        recent_messages=[{"role": "user", "content": "我要出门"}],
+        conversation_context=context,
         memory_hits=[],
         knowledge_hits=["天气问答要优先给结论，再补充穿衣建议。"],
         knowledge_evidences=[],
@@ -82,6 +94,37 @@ def test_tool_final_prompt_spec_renders_structured_field_guide() -> None:
     assert "<tool_phase>" in user_prompt
 
 
+def test_chat_prompt_marks_interrupted_assistant_reply() -> None:
+    """Prompt 文本上下文应标记中断 assistant 部分回复。"""
+    context = ConversationContext(
+        recent_messages=[
+            ConversationHistoryMessage(
+                id="m1",
+                role="assistant",
+                content="我刚才写了一半",
+                reply_status="interrupted",
+            ),
+        ],
+    )
+    spec = build_chat_reply_prompt_spec(
+        mode="companion",
+        safety_level="low",
+        llm_provider="xai_router",
+        message="继续",
+        conversation_context=context,
+        memory_hits=[],
+        knowledge_hits=[],
+        knowledge_evidences=[],
+        retrieval_query="",
+        evidence_status="no_grounding",
+    )
+
+    user_prompt = spec.render_user_prompt()
+
+    assert "上一轮 assistant 回复被用户手动终止" in user_prompt
+    assert "我刚才写了一半" in user_prompt
+
+
 def test_memory_prompt_spec_has_semantic_contract_metadata() -> None:
     """memory prompt 应保留字段语义，但不再使用旧 JSON contract 文案。"""
     spec = build_memory_decision_prompt_spec(
@@ -92,13 +135,13 @@ def test_memory_prompt_spec_has_semantic_contract_metadata() -> None:
     system_prompt = spec.render_system_prompt()
 
     assert spec.prompt_version == "memory.extraction.v2"
-    assert spec.output_schema_name == "MemoryExtractionResult"
+    assert spec.output_schema_name == "MemoryDecisionBatch"
     assert spec.output_contract_version == "memory_extraction.v2"
     assert "<examples>" in system_prompt
     assert "<fallback_policy>" in system_prompt
-    assert "should_store" in system_prompt
-    assert "memory_type" in system_prompt
+    assert "items 数组" in system_prompt
     assert "canonical_key" in system_prompt
+    assert "每条记忆必须单独成项" in system_prompt
     assert "do_not_record_everything" in spec.render_user_prompt()
-    assert "输出 JSON" not in system_prompt
+    assert "抽取一条最有价值的长期记忆" not in system_prompt
     assert "修复为合法 JSON" not in system_prompt

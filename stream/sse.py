@@ -16,18 +16,14 @@ SSE_HEADERS = {
 
 
 def format_sse_event(event: str, payload: dict[str, Any]) -> str:
-    """将事件和负载格式化为 SSE 文本。
-    
-    目的：执行将事件和负载格式化为 SSE 文本相关逻辑。
+    """目的：执行将事件和负载格式化为 SSE 文本相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def sse_response(body: AsyncIterator[str]) -> StreamingResponse:
-    """构建标准 SSE 响应。
-    
-    目的：执行构建标准 SSE 响应相关逻辑。
+    """目的：执行构建标准 SSE 响应相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     return StreamingResponse(

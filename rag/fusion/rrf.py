@@ -14,14 +14,8 @@ def reciprocal_rank_fusion(
     *,
     k: int = 60,
 ) -> list[tuple[str, float]]:
-    """对多路检索结果（每路为文档 id 的有序列表，名次从 1 起）计算 RRF 得分并降序排序。
-
-    目的：融合多个有序检索列表，计算每个文档的 RRF 综合得分并返回降序排列的结果，
-    使来自不同检索来源的结果能够公平地竞争排序位置。
+    """目的：融合多个有序检索列表，计算每个文档的 RRF 综合得分并返回降序排列的结果，
     结果：返回文档 ID 和对应 RRF 得分的元组列表，按得分降序排列。
-
-    算法说明：score(d) = sum_i 1 / (k + rank_i(d))；未出现在某路则该路贡献为 0。
-    k 参数控制平滑因子，较大的 k 值会使不同排名位置的差异减小。
     """
     scores: dict[str, float] = {}
     for ranks in ranked_lists:
@@ -35,7 +29,9 @@ def weighted_reciprocal_rank_fusion(
     *,
     k: int = 60,
 ) -> list[tuple[str, float]]:
-    """支持每一路列表不同权重的 RRF。"""
+    """目的：在融合多路召回结果时按来源或 query 重要性调整得分贡献。
+    结果：返回文档 ID 与加权 RRF 分数的降序列表。
+    """
     scores: dict[str, float] = {}
     for ranks, weight in ranked_lists:
         if not ranks or weight <= 0:
@@ -46,10 +42,7 @@ def weighted_reciprocal_rank_fusion(
 
 
 def rrf_rank_only(ranked_lists: list[list[str]], *, k: int = 60) -> list[str]:
-    """仅返回融合后的 id 序列。
-
-    目的：提供轻量级接口，直接返回融合排序后的文档 ID 列表，
-    忽略得分信息，适用于只需要排序结果而不需要得分的场景。
+    """目的：提供轻量级接口，直接返回融合排序后的文档 ID 列表，
     结果：返回文档 ID 列表，按 RRF 融合得分降序排列。
     """
     return [doc_id for doc_id, _ in reciprocal_rank_fusion(ranked_lists, k=k)]
@@ -60,5 +53,7 @@ def weighted_rrf_rank_only(
     *,
     k: int = 60,
 ) -> list[str]:
-    """仅返回加权 RRF 的排序结果。"""
+    """目的：为只关心排序 ID 的调用方隐藏得分细节。
+    结果：返回按加权 RRF 得分降序排列的文档 ID 列表。
+    """
     return [doc_id for doc_id, _ in weighted_reciprocal_rank_fusion(ranked_lists, k=k)]

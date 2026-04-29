@@ -1,4 +1,8 @@
-"""知识检索服务：混合召回 + 加权 RRF + 独立 rerank。"""
+"""知识检索服务：混合召回 + 加权 RRF + 独立 rerank。
+
+目的：把向量召回、BM25 召回、RRF 融合、rerank 和父块上下文组装成完整检索链路。
+结果：回复生成可以获得排序后的证据 child 和可注入 prompt 的 parent 上下文。
+"""
 
 from __future__ import annotations
 
@@ -21,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 
 class HybridRetriever:
-    """同时负责稠密召回、BM25 召回和重排。"""
+    """目的：同时负责稠密召回、BM25 召回、RRF 融合和重排。
+    结果：对外返回最终候选证据和父块上下文。
+    """
 
     def __init__(
         self,
@@ -31,6 +37,9 @@ class HybridRetriever:
         rerank_client: RerankClient | None = None,
         settings: Settings | None = None,
     ) -> None:
+        """目的：装配 embedding、向量库、关键词召回、rerank 和检索配置。
+        结果：实例可执行完整 RAG 检索流程。
+        """
         self.settings = settings or get_settings()
         self.embedding_service = embedding_service or EmbeddingService()
         self.vector_client = vector_client or PgVectorClient()
@@ -44,9 +53,17 @@ class HybridRetriever:
         *,
         top_k: int = 5,
         category: str | None = None,
+        tenant_id: str = "default",
     ) -> list[RetrievalResult]:
-        """单 query 混合检索，对外保持兼容。"""
-        response = await self.search_with_context([query], top_k=top_k, category=category)
+        """目的：兼容旧调用方只需要内容列表或简单 RetrievalResult 的场景。
+        结果：返回由父块上下文转换出的 RetrievalResult 列表。
+        """
+        response = await self.search_with_context(
+            [query],
+            top_k=top_k,
+            category=category,
+            tenant_id=tenant_id,
+        )
         return [
             RetrievalResult(
                 chunk_id=context.parent_id,
@@ -76,8 +93,11 @@ class HybridRetriever:
         *,
         top_k: int = 5,
         category: str | None = None,
+        tenant_id: str = "default",
     ) -> HybridRetrievalResponse:
-        """返回最终 child 证据与 parent 上下文。"""
+        """目的：对一个或多个 query 执行向量召回、BM25、RRF、rerank 和父块扩展。
+        结果：返回完整 HybridRetrievalResponse，供 prompt 组装使用。
+        """
         valid_queries = [query.strip() for query in queries if query and query.strip()]
         if not valid_queries:
             return HybridRetrievalResponse()
@@ -89,8 +109,18 @@ class HybridRetriever:
 
         for index, query in enumerate(valid_queries):
             dense_results, lexical_results = await asyncio.gather(
-                self._dense_search(query, top_k=dense_top_k, category=category),
-                self.lexical_retriever.search(query, top_k=bm25_top_k, category=category),
+                self._dense_search(
+                    query,
+                    top_k=dense_top_k,
+                    category=category,
+                    tenant_id=tenant_id,
+                ),
+                self.lexical_retriever.search(
+                    query,
+                    top_k=bm25_top_k,
+                    category=category,
+                    tenant_id=tenant_id,
+                ),
             )
             weight = 1.0 if index == 0 else 0.7
             if dense_results:
@@ -133,7 +163,7 @@ class HybridRetriever:
                 item.rank = rank
                 item.score = item.fusion_score or item.dense_score or item.bm25_score or 0.0
 
-        parent_contexts = self._build_parent_contexts(final_candidates)
+        parent_contexts = self._build_parent_contexts(final_candidates, tenant_id=tenant_id)
         return HybridRetrievalResponse(
             query=valid_queries[0],
             candidates=final_candidates,
@@ -143,7 +173,9 @@ class HybridRetriever:
         )
 
     def search_sync(self, query: str) -> list[str]:
-        """同步兼容方法，返回命中内容的字符串列表。"""
+        """目的：为旧同步调用方提供安全降级的检索方法。
+        结果：返回命中内容字符串列表，异常或已有事件循环时返回空列表。
+        """
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -166,7 +198,11 @@ class HybridRetriever:
         *,
         top_k: int,
         category: str | None,
+        tenant_id: str = "default",
     ) -> list[RetrievalResult]:
+        """目的：把 query 转为 embedding 后从 pgvector 检索 child chunk。
+        结果：返回标准化后的 RetrievalResult 列表，异常时降级为空列表。
+        """
         try:
             query_embedding = await self.embedding_service.embed_text(query)
             rows = self.vector_client.search_knowledge(
@@ -174,6 +210,7 @@ class HybridRetriever:
                 top_k=top_k,
                 category=category,
                 chunk_role="child",
+                tenant_id=tenant_id,
             )
             return self._normalize_results(rows, top_k=top_k)
         except RuntimeError:
@@ -189,6 +226,9 @@ class HybridRetriever:
         *,
         top_k: int,
     ) -> list[RetrievalResult]:
+        """目的：把 pgvector 原始行转换为 RetrievalResult，并过滤低价值和重复内容。
+        结果：返回最多 top_k 条可参与融合排序的候选。
+        """
         results: list[RetrievalResult] = []
         seen_keys: set[str] = set()
 
@@ -230,7 +270,12 @@ class HybridRetriever:
     def _build_parent_contexts(
         self,
         candidates: list[RetrievalResult],
+        *,
+        tenant_id: str = "default",
     ) -> list[RetrievedParentContext]:
+        """目的：按候选 child 的 parent_id 聚合，并从向量库读取完整 parent 内容。
+        结果：返回可进入 prompt 的 RetrievedParentContext 列表。
+        """
         parent_order: list[str] = []
         grouped: dict[str, list[RetrievalResult]] = {}
         for item in candidates:
@@ -241,7 +286,7 @@ class HybridRetriever:
             grouped[parent_id].append(item)
 
         selected_parent_ids = parent_order[: self.settings.prompt_parent_top_k]
-        parent_rows = self.vector_client.get_parent_chunks(selected_parent_ids)
+        parent_rows = self.vector_client.get_parent_chunks(selected_parent_ids, tenant_id=tenant_id)
         parent_map = {
             str((row.get("metadata_json") or {}).get("parent_id", "")): row
             for row in parent_rows
@@ -291,6 +336,9 @@ class HybridRetriever:
         *,
         source_type: str,
     ) -> None:
+        """目的：把向量召回和 BM25 命中的同一 chunk 合并为一条候选记录。
+        结果：保留更高分数、更完整内容和更完整元数据。
+        """
         existing = candidates.get(item.chunk_id)
         if existing is None:
             candidates[item.chunk_id] = item
@@ -324,6 +372,9 @@ class HybridRetriever:
         candidates[item.chunk_id] = existing.model_copy(update=update)
 
     def _is_low_value_heading(self, content: str, metadata: dict[str, Any]) -> bool:
+        """目的：过滤只有一级短标题、缺少正文信息的召回噪声。
+        结果：返回 True 表示该内容不应进入候选。
+        """
         heading_level = metadata.get("heading_level")
         char_count = metadata.get("char_count")
         if heading_level == 1 and isinstance(char_count, int) and char_count <= 24:
@@ -331,6 +382,9 @@ class HybridRetriever:
         return False
 
     def _build_dedup_key(self, content: str, metadata: dict[str, Any]) -> str:
+        """目的：优先使用逻辑 chunk ID，缺失时基于文件位置或内容哈希去重。
+        结果：返回稳定的候选去重字符串。
+        """
         logical_chunk_id = str(metadata.get("logical_chunk_id", "")).strip()
         if logical_chunk_id:
             return logical_chunk_id
@@ -346,4 +400,6 @@ class HybridRetriever:
 
 
 class KnowledgeRetriever(HybridRetriever):
-    """兼容旧引用名。"""
+    """目的：保留 KnowledgeRetriever 入口，避免已有调用方直接依赖 HybridRetriever 名称。
+    结果：旧代码可继续获得相同的混合检索能力。
+    """

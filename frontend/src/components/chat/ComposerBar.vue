@@ -6,6 +6,7 @@
           :value="draft"
           :auto-size="{ minRows: 2, maxRows: 5 }"
           :bordered="false"
+          :disabled="inputDisabled"
           class="composer-input"
           placeholder="写下想对 TA 说的话，或把心里的小纠结交给我"
           @update:value="$emit('update:draft', String($event ?? ''))"
@@ -14,25 +15,29 @@
       </div>
 
       <div class="composer-footer">
-        <div class="mode-row" aria-label="模式切换">
-          <button
-            v-for="mode in modeOptions"
-            :key="mode.value"
-            :class="['mode-chip', { 'is-active': mode.value === activeMode }]"
-            type="button"
-            @click="$emit('change-mode', mode.value)"
-          >
-            {{ mode.label }}
-          </button>
+        <div class="composer-left">
+          <div class="mode-row" aria-label="模式切换">
+            <button
+              v-for="mode in modeOptions"
+              :key="mode.value"
+              :class="['mode-chip', { 'is-active': mode.value === activeMode }]"
+              type="button"
+              :disabled="inputDisabled"
+              @click="$emit('change-mode', mode.value)"
+            >
+              {{ mode.label }}
+            </button>
+          </div>
         </div>
 
         <a-button
           class="send-button"
           type="primary"
-          :loading="submitting"
-          @click="$emit('submit')"
+          :danger="streaming"
+          :loading="submitting && !streaming"
+          @click="streaming ? $emit('stop') : $emit('submit')"
         >
-          发送心意
+          {{ streaming ? '停止' : '发送心意' }}
         </a-button>
       </div>
     </div>
@@ -50,12 +55,15 @@ interface ModeOption {
 const props = defineProps<{
   activeMode: ChatMode
   draft: string
+  inputDisabled: boolean
   modeOptions: ModeOption[]
   submitting: boolean
+  streaming: boolean
 }>()
 
 const emit = defineEmits<{
   (event: 'change-mode', mode: ChatMode): void
+  (event: 'stop'): void
   (event: 'submit'): void
   (event: 'update:draft', value: string): void
 }>()
@@ -65,6 +73,10 @@ const handleEnter = (event: KeyboardEvent) => {
     return
   }
   event.preventDefault()
+  if (props.streaming) {
+    emit('stop')
+    return
+  }
   emit('submit')
 }
 </script>
@@ -116,6 +128,11 @@ const handleEnter = (event: KeyboardEvent) => {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+}
+
+.composer-left {
+  display: grid;
+  gap: 7px;
 }
 
 .mode-row {

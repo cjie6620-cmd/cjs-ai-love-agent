@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from persistence.conversation_repository import ConversationRepository
@@ -63,3 +64,26 @@ def test_deserialize_trace_uses_only_current_memory_hit_schema():
     assert result.knowledge_hits == ["k1"]
     assert result.retrieval_query == "query"
     assert result.safety_level == "medium"
+
+
+def test_serialize_interrupted_assistant_message_exposes_reply_status():
+    """中断 assistant 消息应在历史接口中带出 interrupted 状态。"""
+    repository = _make_repository()
+    message = SimpleNamespace(
+        id="msg-001",
+        role="assistant",
+        content="已经生成的部分内容",
+        created_at=None,
+        trace_json={
+            "stream": {
+                "status": "interrupted",
+                "finish_reason": "user_cancelled",
+            }
+        },
+        safety_tags={"reply_status": "interrupted"},
+    )
+
+    result = repository._serialize_message(message)
+
+    assert result.reply_status == "interrupted"
+    assert result.content == "已经生成的部分内容"

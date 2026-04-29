@@ -7,14 +7,16 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
 
 from celery import Celery
 
 from core.config import get_settings
-
-from .memory import MemoryManager
+from llm import LlmClient
+from contracts.rag import KnowledgeIndexTextRequest
+from persistence import ConversationRepository, KnowledgeRepository
+from rag.storage import MinioClient
+from security import RedisService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -41,6 +43,99 @@ celery_app.conf.update(
 )
 
 
+def _run_file_index_job(job_id: str) -> dict[str, object]:
+    """目的：执行 _run_file_index_job 对应的模块级处理逻辑。
+    结果：返回或落地稳定结果，供调用方继续使用。
+    """
+    repository = KnowledgeRepository()
+    if not repository.mark_job_running(job_id):
+        return {"status": "canceled"}
+    job = repository.get_job_by_id(job_id)
+    if job is None or not job.document_id:
+        raise ValueError("知识索引任务不存在")
+    document = repository.get_document_by_id(job.document_id)
+    if document is None:
+        raise ValueError("知识文档不存在")
+
+    if not document.object_name:
+        if not document.content_text:
+            raise RuntimeError("文本知识缺少原文内容，无法重建")
+        return _run_text_index_for_document(repository, job_id, document.content_text)
+
+    file_data = MinioClient(log_startup=False).download_file(document.object_name)
+    if file_data is None:
+        raise RuntimeError("知识文件无法从对象存储读取")
+    logger.info(
+        "开始异步索引知识文件: filename=%s, size=%d bytes, category=%s",
+        document.filename,
+        len(file_data),
+        document.category,
+    )
+
+    from rag import RagService
+
+    result = asyncio.run(
+        RagService().index_file(
+            file_data,
+            document.filename,
+            category=document.category,
+            source=document.source,
+            tenant_id=document.tenant_id,
+            created_by=document.created_by,
+            document_id=document.id,
+        )
+    )
+    if not result.success:
+        raise RuntimeError(result.message)
+    repository.mark_job_succeeded(
+        job_id,
+        chunk_count=result.chunks_written,
+        result_json=result.model_dump(),
+    )
+    logger.info("异步索引完成: filename=%s, chunks=%d", document.filename, result.chunks_written)
+    return result.model_dump()
+
+
+def _run_text_index_for_document(
+    repository: KnowledgeRepository,
+    job_id: str,
+    text: str,
+) -> dict[str, object]:
+    """目的：执行 _run_text_index_for_document 对应的模块级处理逻辑。
+    结果：返回或落地稳定结果，供调用方继续使用。
+    """
+    job = repository.get_job_by_id(job_id)
+    if job is None or not job.document_id:
+        raise ValueError("知识索引任务不存在")
+    document = repository.get_document_by_id(job.document_id)
+    if document is None:
+        raise ValueError("知识文档不存在")
+    request = KnowledgeIndexTextRequest(
+        title=document.title,
+        text=text,
+        category=document.category,
+        source=document.source,
+    )
+    from rag import RagService
+
+    result = asyncio.run(
+        RagService().index_text(
+            request,
+            tenant_id=document.tenant_id,
+            created_by=document.created_by,
+            document_id=document.id,
+        )
+    )
+    if not result.success:
+        raise RuntimeError(result.message)
+    repository.mark_job_succeeded(
+        job_id,
+        chunk_count=result.chunks_written,
+        result_json=result.model_dump(),
+    )
+    return result.model_dump()
+
+
 @celery_app.task(
     bind=True,
     name="ai_love.index_knowledge_file",
@@ -49,99 +144,237 @@ celery_app.conf.update(
 )
 def index_knowledge_file(
     self,
-    file_data_b64: str,
-    filename: str,
-    category: str = "relationship_knowledge",
-    source: str = "",
+    job_id: str,
 ) -> dict[str, object]:
-    """异步知识文件索引任务：解析 → 切分 → Embedding → 入库。
-
-    目的：在后台异步执行知识文件的完整索引流程，避免大文件索引阻塞 API 响应。
+    """目的：在后台异步执行知识文件的完整索引流程，避免大文件索引阻塞 API 响应。
     结果：将文件内容解析、切分、嵌入后存入向量库，返回索引结果。
     """
+    repository = KnowledgeRepository()
     try:
-        # 解码文件数据
-        file_data = base64.b64decode(file_data_b64)
-        logger.info(
-            "开始异步索引知识文件: filename=%s, size=%d bytes, category=%s",
-            filename,
-            len(file_data),
-            category,
-        )
-
-        # 延迟导入避免循环依赖
-        from rag import RagService
-
-        service = RagService()
-        result = asyncio.run(
-            service.index_file(
-                file_data,
-                filename,
-                category=category,
-                source=source or f"async:{filename}",
-            )
-        )
-        logger.info("异步索引完成: filename=%s, chunks=%d", filename, result.chunks_written)
-        return result.model_dump()
+        return _run_file_index_job(job_id)
 
     except Exception as exc:
-        logger.error("异步索引失败: filename=%s, error=%s", filename, exc)
-        # 自动重试
+        repository.mark_job_failed(job_id, error_message=str(exc))
+        logger.error("异步索引失败: job=%s, error=%s", job_id, exc)
         raise self.retry(exc=exc) from exc
 
 
 @celery_app.task(
     bind=True,
-    name="ai_love.extract_and_save_memory",
-    max_retries=2,
-    default_retry_delay=10,
+    name="ai_love.index_knowledge_text",
+    max_retries=3,
+    default_retry_delay=30,
 )
-def extract_and_save_memory(
-    self,
-    user_id: str,
-    user_message: str,
-    assistant_reply: str,
-    session_id: str | None = None,
-) -> dict[str, object]:
-    """LLM 驱动的记忆提炼任务：从对话中提取关键记忆并写入向量库。
+def index_knowledge_text(self, job_id: str, payload: dict[str, object]) -> dict[str, object]:
+    """目的：异步文本知识索引任务。
+    结果：完成当前业务处理并返回约定结果。
+    """
+    repository = KnowledgeRepository()
+    try:
+        if not repository.mark_job_running(job_id):
+            return {"status": "canceled"}
+        job = repository.get_job_by_id(job_id)
+        if job is None:
+            raise ValueError("知识索引任务不存在")
+        request = KnowledgeIndexTextRequest.model_validate(payload)
+        document = repository.get_document_by_id(job.document_id) if job.document_id else None
+        if document is not None and document.content_text:
+            request = KnowledgeIndexTextRequest(
+                title=document.title,
+                text=document.content_text,
+                category=document.category,
+                source=document.source,
+            )
+        from rag import RagService
 
-    目的：使用 LLM 对对话内容进行智能提炼，提取值得长期记忆的关键信息。
-    结果：将提炼后的记忆存入向量库，返回保存结果或跳过原因。
+        result = asyncio.run(
+            RagService().index_text(
+                request,
+                tenant_id=job.tenant_id,
+                created_by=job.created_by,
+                document_id=job.document_id or "",
+            )
+        )
+        if not result.success:
+            raise RuntimeError(result.message)
+        repository.mark_job_succeeded(
+            job_id,
+            chunk_count=result.chunks_written,
+            result_json=result.model_dump(),
+        )
+        return result.model_dump()
+    except Exception as exc:
+        repository.mark_job_failed(job_id, error_message=str(exc))
+        logger.error("文本知识索引失败: job=%s, error=%s", job_id, exc)
+        raise self.retry(exc=exc) from exc
+
+
+@celery_app.task(
+    bind=True,
+    name="ai_love.reindex_knowledge_document",
+    max_retries=3,
+    default_retry_delay=30,
+)
+def reindex_knowledge_document(self, job_id: str) -> dict[str, object]:
+    """目的：异步重建单个知识文档。
+    结果：完成当前业务处理并返回约定结果。
+    """
+    repository = KnowledgeRepository()
+    try:
+        return _run_file_index_job(job_id)
+    except Exception as exc:
+        repository.mark_job_failed(job_id, error_message=str(exc))
+        logger.error("单文档知识重建失败: job=%s, error=%s", job_id, exc)
+        raise self.retry(exc=exc) from exc
+
+
+@celery_app.task(
+    bind=True,
+    name="ai_love.reindex_knowledge_all",
+    max_retries=1,
+    default_retry_delay=60,
+)
+def reindex_knowledge_all(self, job_id: str) -> dict[str, object]:
+    """目的：异步重建当前租户全部 active 知识文档。
+    结果：完成当前业务处理并返回约定结果。
+    """
+    repository = KnowledgeRepository()
+    lock_key = ""
+    try:
+        if not repository.mark_job_running(job_id):
+            return {"status": "canceled"}
+        job = repository.get_job_by_id(job_id)
+        if job is None:
+            raise ValueError("知识重建任务不存在")
+        lock_key = f"knowledge:reindex:{job.tenant_id}"
+        documents = repository.list_active_documents(job.tenant_id)
+        total_chunks = 0
+        from rag import RagService
+
+        service = RagService()
+        for document in documents:
+            if document.object_name:
+                file_data = MinioClient(log_startup=False).download_file(document.object_name)
+                if file_data is None:
+                    logger.warning("跳过无法读取的知识文件: document=%s", document.id)
+                    continue
+                result = asyncio.run(
+                    service.index_file(
+                        file_data,
+                        document.filename,
+                        category=document.category,
+                        source=document.source,
+                        tenant_id=document.tenant_id,
+                        created_by=document.created_by,
+                        document_id=document.id,
+                    )
+                )
+            elif document.content_text:
+                result = asyncio.run(
+                    service.index_text(
+                        KnowledgeIndexTextRequest(
+                            title=document.title,
+                            text=document.content_text,
+                            category=document.category,
+                            source=document.source,
+                        ),
+                        tenant_id=document.tenant_id,
+                        created_by=document.created_by,
+                        document_id=document.id,
+                    )
+                )
+            else:
+                logger.warning("跳过缺少原始内容的知识文档: document=%s", document.id)
+                continue
+            if not result.success:
+                raise RuntimeError(result.message)
+            total_chunks += result.chunks_written
+        repository.mark_job_succeeded(
+            job_id,
+            chunk_count=total_chunks,
+            result_json={"documents": len(documents), "chunks": total_chunks},
+        )
+        return {"documents": len(documents), "chunks": total_chunks}
+    except Exception as exc:
+        repository.mark_job_failed(job_id, error_message=str(exc))
+        logger.error("全量知识重建失败: job=%s, error=%s", job_id, exc)
+        raise self.retry(exc=exc) from exc
+    finally:
+        if lock_key:
+            RedisService(log_startup=False).delete(lock_key)
+
+
+@celery_app.task(
+    bind=True,
+    name="ai_love.refresh_session_summary",
+    max_retries=3,
+    default_retry_delay=30,
+)
+def refresh_session_summary(self, session_id: str) -> dict[str, object]:
+    """目的：异步刷新会话滚动摘要。
+    结果：刷新登录凭证并返回新的登录态信息。
     """
     try:
-        logger.info("开始 LLM 记忆提炼: user_id=%s", user_id)
+        settings = get_settings()
+        repository = ConversationRepository()
+        checkpoint = repository.get_summary_checkpoint(session_id)
+        messages = repository.list_messages_after(
+            session_id,
+            str(checkpoint.get("last_message_id", "")),
+            limit=settings.conversation_cache_max_messages,
+        )
+        if not messages:
+            return {"status": "skipped", "reason": "no_pending_messages"}
 
-        memory_manager = MemoryManager()
+        old_summary = str(checkpoint.get("summary_text", "") or "")
+        transcript_lines: list[str] = []
+        for item in messages:
+            content = item.content.strip()
+            if not content:
+                continue
+            role = "用户" if item.role == "user" else "助手"
+            if item.role == "assistant" and item.reply_status == "interrupted":
+                content = f"上一轮 assistant 回复被用户手动终止，以下是已生成的部分内容：\n{content}"
+            transcript_lines.append(f"{role}：{content}")
+        transcript = "\n".join(transcript_lines)
+        system_prompt = "你是会话上下文摘要器，只输出稳定、克制、可继续对话使用的中文摘要。"
+        user_prompt = (
+            "请基于旧摘要和新增对话，生成新的会话滚动摘要。\n"
+            "保留：关系背景、用户当前状态、关键事实、已给出的重要建议、未解决问题。\n"
+            "忽略：寒暄、重复情绪词、无长期上下文价值的闲聊。\n"
+            f"最多 {settings.conversation_summary_max_chars} 字。\n\n"
+            f"旧摘要：\n{old_summary or '无'}\n\n"
+            f"新增对话：\n{transcript}"
+        )
+        summary_text = LlmClient.for_memory_analysis().generate_sync(
+            system_prompt,
+            user_prompt,
+        ).strip()
+        if not summary_text:
+            summary_text = old_summary
+        summary_text = summary_text[:settings.conversation_summary_max_chars]
 
-        async def _run_memory_pipeline() -> dict[str, object]:
-            """在单个事件循环中顺序执行记忆提炼 + 分类 + 保存，避免重复创建事件循环。"""
-            decision = await memory_manager.decide_memory(
-                user_message=user_message,
-                assistant_reply=assistant_reply,
-            )
-            if not decision.should_store or not decision.memory_text:
-                return {"status": "skipped", "reason": decision.reason_code}
-
-            record_id = await memory_manager.save_memory(
-                user_id,
-                decision,
-                session_id=session_id,
-            )
-            return {
-                "status": "saved" if record_id else "skipped",
-                "record_id": record_id,
-                "memory": decision.memory_text,
-                "canonical_key": decision.canonical_key,
-                "memory_type": decision.memory_type,
-                "importance_score": decision.importance_score,
-                "confidence": decision.confidence,
-                "merge_strategy": decision.merge_strategy,
-            }
-
-        result = asyncio.run(_run_memory_pipeline())
-        logger.info("LLM 记忆提炼完成: user_id=%s, result=%s", user_id, result)
-        return result
-
+        covered_count_raw = checkpoint.get("covered_message_count", 0)
+        covered_count = int(covered_count_raw) if isinstance(covered_count_raw, int | str) else 0
+        covered_count += len(messages)
+        last_message_id = messages[-1].id
+        repository.update_session_summary(
+            session_id,
+            summary_text=summary_text,
+            covered_message_count=covered_count,
+            last_message_id=last_message_id,
+        )
+        logger.info(
+            "会话滚动摘要刷新完成: session=%s, covered=%d, last_message_id=%s",
+            session_id,
+            covered_count,
+            last_message_id,
+        )
+        return {
+            "status": "updated",
+            "covered_message_count": covered_count,
+            "last_message_id": last_message_id,
+        }
     except Exception as exc:
-        logger.error("LLM 记忆提炼失败: user_id=%s, error=%s", user_id, exc)
+        logger.error("会话滚动摘要刷新失败: session=%s, error=%s", session_id, exc)
         raise self.retry(exc=exc) from exc

@@ -17,13 +17,20 @@ from .models import MemoryEventOutbox
 
 
 class MemoryOutboxRepository:
-    """长期记忆事件 Outbox 仓储。"""
+    """目的：封装长期记忆事件的待投递、重试、成功和消费状态更新。
+    结果：MQ 生产者、补偿任务和消费者共享一致的可靠投递状态。
+    """
 
     def __init__(self, session_factory: sessionmaker[Session] | None = None) -> None:
+        """目的：注入或创建数据库 session factory，方便生产和测试复用。
+        结果：实例可以通过独立 session 执行 Outbox 状态读写。
+        """
         self.session_factory = session_factory or get_session_factory()
 
     def save_pending(self, payload: dict[str, Any], *, error: str = "") -> str:
-        """保存待补投事件；相同 event_id 已存在时只更新错误信息。"""
+        """目的：在 MQ 投递失败时持久化事件，并对相同 event_id 做幂等更新。
+        结果：返回 Outbox 记录 ID，已发送事件不会被重新置为待投递。
+        """
         event_id = str(payload["event_id"])
         with self.session_factory() as session:
             existing = session.scalar(
@@ -54,7 +61,9 @@ class MemoryOutboxRepository:
             return record.id
 
     def list_due(self, *, limit: int = 50) -> list[MemoryEventOutbox]:
-        """读取到期需要补投的事件。"""
+        """目的：筛选 pending / retrying 且达到重试时间的 Outbox 记录。
+        结果：按创建时间返回最多 limit 条待补偿事件。
+        """
         now = datetime.now(UTC)
         with self.session_factory() as session:
             rows = session.scalars(
@@ -67,7 +76,9 @@ class MemoryOutboxRepository:
             return list(rows)
 
     def mark_sent(self, event_id: str) -> None:
-        """标记事件已成功投递。"""
+        """目的：在 MQ 补投成功后清除错误信息并结束投递重试。
+        结果：对应 event_id 的记录状态变为 sent。
+        """
         with self.session_factory() as session:
             record = session.scalar(
                 select(MemoryEventOutbox).where(MemoryEventOutbox.event_id == event_id)
@@ -79,7 +90,9 @@ class MemoryOutboxRepository:
             session.commit()
 
     def mark_retry(self, event_id: str, *, error: str, max_retries: int = 10) -> None:
-        """记录补投失败并计算下一次重试时间。"""
+        """目的：保存失败原因并按指数退避安排下一轮补偿。
+        结果：未超限记录变为 retrying，超限记录变为 failed。
+        """
         with self.session_factory() as session:
             record = session.scalar(
                 select(MemoryEventOutbox).where(MemoryEventOutbox.event_id == event_id)
@@ -98,7 +111,9 @@ class MemoryOutboxRepository:
             session.commit()
 
     def has_processed_task(self, task_id: str) -> bool:
-        """判断 task_id 是否已投递成功，用于消费者幂等前置判断。"""
+        """目的：在消费者处理前按 task_id 做幂等拦截。
+        结果：返回 True 表示该任务已处理过，可直接 ACK。
+        """
         with self.session_factory() as session:
             return (
                 session.scalar(
@@ -111,7 +126,9 @@ class MemoryOutboxRepository:
             )
 
     def mark_processed(self, task_id: str) -> None:
-        """标记 task_id 已消费完成。"""
+        """目的：在消费者成功处理后更新同 task_id 的所有 Outbox 记录。
+        结果：相关记录状态变为 processed，并清空错误信息。
+        """
         with self.session_factory() as session:
             rows = session.scalars(
                 select(MemoryEventOutbox).where(MemoryEventOutbox.task_id == task_id)
@@ -122,7 +139,9 @@ class MemoryOutboxRepository:
             session.commit()
 
     def mark_invalid(self, task_id: str, *, error: str) -> None:
-        """标记非法消息，避免无限重试。"""
+        """目的：记录无法解析或校验失败的消息，避免 RocketMQ 与 Outbox 无限重试。
+        结果：相关记录状态变为 invalid_payload，并保存错误摘要。
+        """
         with self.session_factory() as session:
             rows = session.scalars(
                 select(MemoryEventOutbox).where(MemoryEventOutbox.task_id == task_id)

@@ -1,4 +1,8 @@
-"""独立 reranker 服务客户端。"""
+"""独立 reranker 服务客户端。
+
+目的：通过 HTTP 调用外部重排服务，对混合召回候选进行精排。
+结果：RAG 检索链路可以获得更贴近 query 的排序结果。
+"""
 
 from __future__ import annotations
 
@@ -14,9 +18,14 @@ logger = logging.getLogger(__name__)
 
 
 class RerankClient:
-    """通过 HTTP 调用独立 reranker-api 服务。"""
+    """目的：封装 rerank 请求体、认证头、超时和降级处理。
+    结果：上层检索器只需要传入 query 和候选列表即可获得重排结果。
+    """
 
     def __init__(self, settings: Settings | None = None) -> None:
+        """目的：注入或读取 reranker 服务地址、模型名、top_n 和超时配置。
+        结果：实例具备调用外部 reranker-api 的配置。
+        """
         self.settings = settings or get_settings()
 
     async def rerank(
@@ -26,7 +35,9 @@ class RerankClient:
         *,
         top_n: int | None = None,
     ) -> tuple[list[RetrievalResult], bool, str]:
-        """返回重排后的候选和是否成功应用。"""
+        """目的：把候选 chunk 发送到 reranker-api，并按返回分数重新排序。
+        结果：返回候选列表、是否应用重排和失败原因。
+        """
         if not query.strip() or not candidates:
             return candidates, False, ""
 
@@ -87,6 +98,9 @@ class RerankClient:
 
     @staticmethod
     def _build_text(item: RetrievalResult) -> str:
+        """目的：把标题路径和正文合并成 reranker 更容易理解的文档文本。
+        结果：返回用于重排服务的字符串。
+        """
         heading_path = item.heading_path.strip()
         content = item.content.strip()
         if heading_path and content:

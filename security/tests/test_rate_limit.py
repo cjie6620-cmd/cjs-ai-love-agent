@@ -116,8 +116,8 @@ class TestRedisServiceReconnect:
     结果：便于回归时快速定位测试范围，保证关键能力持续可验证。
     """
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_init_unavailable_sets_last_connect_time(self, mock_settings, mock_redis):
         """初始化时 Redis 不可用，应记录最后一次重连尝试时间。
 
@@ -128,11 +128,11 @@ class TestRedisServiceReconnect:
         mock_redis.return_value.ping.side_effect = Exception("连接失败")
 
         service = RedisService()
-        assert service._available is False
-        assert service._last_connect_try is not None
+        assert service.client._available is False
+        assert service.client._last_connect_try is not None
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_check_rate_limit_triggers_reconnect(self, mock_settings, mock_redis):
         """退避期过后调用 check_rate_limit 时应尝试重连，而非永久放行。
 
@@ -146,10 +146,10 @@ class TestRedisServiceReconnect:
         mock_redis.return_value.eval.return_value = 1
 
         service = RedisService()
-        assert service._available is False
+        assert service.client._available is False
 
         # 模拟退避期已过：将上次尝试时间设为 20 秒前
-        service._last_connect_try = time.time() - 20
+        service.client._last_connect_try = time.time() - 20
 
         # 重连时 ping 成功
         mock_redis.return_value.ping.side_effect = None
@@ -158,12 +158,12 @@ class TestRedisServiceReconnect:
         # 调用 check_rate_limit，退避期已过应触发重连并成功
         result = service.check_rate_limit("user_reconnect")
         assert result is True
-        assert service._available is True
+        assert service.client._available is True
         # 重连成功后 _last_connect_try 被清空
-        assert service._last_connect_try is None
+        assert service.client._last_connect_try is None
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_reconnect_interval_respected(self, mock_settings, mock_redis):
         """退避期内不应重连，ping 调用次数不增加，快速降级放行。
 
@@ -174,8 +174,8 @@ class TestRedisServiceReconnect:
         mock_redis.return_value.ping.side_effect = Exception("不可用")
 
         service = RedisService()
-        assert service._available is False
-        first_try = service._last_connect_try
+        assert service.client._available is False
+        first_try = service.client._last_connect_try
 
         # __init__ 调用了 1 次 ping，记录基线
         ping_count_after_init = mock_redis.return_value.ping.call_count
@@ -184,7 +184,7 @@ class TestRedisServiceReconnect:
         result = service.check_rate_limit("user_quick")
         assert result is True  # 降级放行
         # _last_connect_try 未更新（没有发起重连）
-        assert service._last_connect_try == first_try
+        assert service.client._last_connect_try == first_try
         # ping 调用次数不增加，说明退避真正生效
         assert mock_redis.return_value.ping.call_count == ping_count_after_init
 
@@ -196,8 +196,8 @@ class TestRedisServiceParamValidation:
     结果：便于回归时快速定位测试范围，保证关键能力持续可验证。
     """
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_negative_rate_triggers_limit(self, mock_settings, mock_redis):
         """rate <= 0 时应触发限流（返回 False），而非静默放行。
 
@@ -215,8 +215,8 @@ class TestRedisServiceParamValidation:
         # 静默降级放行
         assert mock_client.eval.call_count == 0
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_zero_capacity_triggers_limit(self, mock_settings, mock_redis):
         """capacity < 1 时应触发限流（返回 False）。
 
@@ -233,8 +233,8 @@ class TestRedisServiceParamValidation:
         assert result is False
         assert mock_client.eval.call_count == 0
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_lua_returns_negative_one_triggers_limit(self, mock_settings, mock_redis):
         """Lua 脚本返回 -1（参数非法）时，应触发限流而非放行。
 
@@ -251,8 +251,8 @@ class TestRedisServiceParamValidation:
         result = service.check_rate_limit("user_lua_invalid")
         assert result is False
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_param_validation_before_reconnect(self, mock_settings, mock_redis):
         """Redis 不可用时，参数异常仍必须返回 False（限流），而非降级放行。
 
@@ -263,7 +263,7 @@ class TestRedisServiceParamValidation:
         mock_redis.return_value.ping.side_effect = Exception("Redis 挂了")
 
         service = RedisService()
-        assert service._available is False
+        assert service.client._available is False
 
         # Redis 不可用 + rate <= 0：必须拦截，不能放行
         assert service.check_rate_limit("user_bad", rate=-1.0, capacity=10) is False
@@ -278,8 +278,8 @@ class TestRedisServiceRateLimit:
     结果：便于回归时快速定位测试范围，保证关键能力持续可验证。
     """
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_token_acquired_returns_true(self, mock_settings, mock_redis):
         """获取到令牌时返回 True。
 
@@ -297,8 +297,8 @@ class TestRedisServiceRateLimit:
         assert result is True
         mock_client.eval.assert_called_once()
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_token_unavailable_returns_false(self, mock_settings, mock_redis):
         """令牌不足时返回 False（触发限流）。
 
@@ -315,8 +315,8 @@ class TestRedisServiceRateLimit:
         result = service.check_rate_limit("user_789")
         assert result is False
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_eval_called_with_correct_args(self, mock_settings, mock_redis):
         """eval 调用必须传入：Lua 脚本、key、rate、capacity（now_ms 已移除）。
 
@@ -334,14 +334,14 @@ class TestRedisServiceRateLimit:
 
         call_args = mock_client.eval.call_args
         assert call_args[0][0] == _TOKEN_BUCKET_SCRIPT  # Lua 脚本
-        assert call_args[0][2] == b"rate_limit:user_test"  # key（bytes 编码）
+        assert call_args[0][2] == "rate_limit:user_test"  # key（bytes 编码）
         assert call_args[0][3] == 0.5  # rate
         assert call_args[0][4] == 30  # capacity
         # now_ms 不再由应用侧传入，由 Lua 内部通过 Redis TIME 获取
         assert len(call_args[0]) == 5
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_exception_allows_request(self, mock_settings, mock_redis):
         """Redis 操作异常时降级放行，不阻塞请求。
 
@@ -358,10 +358,10 @@ class TestRedisServiceRateLimit:
         result = service.check_rate_limit("user_error")
         assert result is True  # 降级放行
         # 异常时应标记为不可用，下次调用触发重连
-        assert service._available is False
+        assert service.client._available is False
 
-    @patch("security.rate_limit.Redis.from_url")
-    @patch("security.rate_limit.get_settings")
+    @patch("security.redis_client.Redis.from_url")
+    @patch("security.redis_client.get_settings")
     def test_redis_still_unavailable_after_reconnect_allow(self, mock_settings, mock_redis):
         """重连失败后仍不可用，降至放行并标记不可用。
 
@@ -375,12 +375,12 @@ class TestRedisServiceRateLimit:
         mock_redis.return_value.__getitem__ = MagicMock(side_effect=Exception("client 重建失败"))
 
         service = RedisService()
-        assert service._available is False
+        assert service.client._available is False
 
         result = service.check_rate_limit("user_still_down")
         # 降级放行
         assert result is True
-        assert service._available is False
+        assert service.client._available is False
 
 
 class TestTokenBucketSimulation:

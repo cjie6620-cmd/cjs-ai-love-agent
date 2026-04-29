@@ -34,17 +34,23 @@ _ENV_PASSWORD = "QQ_EMAIL_PASSWORD"
 
 
 class EmailTool(BaseTool):
-    """QQ 邮箱发送工具类。
-    
-    目的：封装QQ 邮箱发送工具类相关工具能力并对外暴露统一入口。
+    """目的：封装QQ 邮箱发送工具类相关工具能力并对外暴露统一入口。
     结果：业务层可按一致方式判断或调用该能力。
     """
 
+    # 目的：保存 name 字段，用于 EmailTool 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 name 值。
     name = "email"
+    # 目的：保存 description 字段，用于 EmailTool 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 description 值。
     description = "邮件发送工具"
 
     # QQ 邮箱 SMTP 服务器配置
+    # 目的：保存 SMTP_SERVER 字段，用于 EmailTool 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SMTP_SERVER 值。
     SMTP_SERVER: str = "smtp.qq.com"
+    # 目的：保存 SMTP_PORT 字段，用于 EmailTool 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SMTP_PORT 值。
     SMTP_PORT: int = 465
 
     def __init__(
@@ -52,9 +58,7 @@ class EmailTool(BaseTool):
         sender_email: Optional[str] = None,
         sender_password: Optional[str] = None,
     ) -> None:
-        """初始化邮件工具实例。
-
-        目的：接收并保存运行所需的依赖、配置和初始状态。
+        """目的：接收并保存运行所需的依赖、配置和初始状态。
         结果：实例初始化完成，可直接执行后续业务调用。
         """
         # 优先使用传入参数，否则从环境变量读取
@@ -77,17 +81,19 @@ class EmailTool(BaseTool):
             )
 
     def is_enabled(self) -> bool:
-        """判断邮件工具是否启用。"""
+        """目的：根据发件邮箱和授权码配置判断 SMTP 能力是否可用。
+        结果：返回 True 表示可以尝试发送邮件。
+        """
         return self.enabled
 
     def disabled_message(self) -> str:
-        """返回邮件工具不可用提示。"""
+        """目的：在邮箱配置缺失时提供明确的禁用原因。
+        结果：返回可展示给上层的错误说明。
+        """
         return "邮件工具未启用，请检查发件人邮箱和授权码配置"
 
     def invoke(self, **kwargs: Any) -> ToolResult:
-        """统一调用入口。
-
-        目的：兼容 Agent 工具编排，统一收敛邮件发送输入与返回结构。
+        """目的：兼容 Agent 工具编排，统一收敛邮件发送输入与返回结构。
         结果：上层无需关心具体发送方法，只需通过 invoke 调用。
         """
         to_emails = kwargs.get("to_emails")
@@ -105,9 +111,7 @@ class EmailTool(BaseTool):
         self,
         **kwargs: Any,
     ) -> ToolResult:
-        """执行邮件发送。
-
-        目的：封装实际 SMTP 发送逻辑，并输出统一结果。
+        """目的：封装实际 SMTP 发送逻辑，并输出统一结果。
         结果：返回标准化工具结果，便于 Agent 和业务层直接消费。
         """
         to_emails = self._normalize_recipients(kwargs.get("to_emails"))
@@ -128,9 +132,7 @@ class EmailTool(BaseTool):
         body: str,
         html: Optional[str] = None,
     ) -> ToolResult:
-        """发送邮件方法。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         # 空值判断：检查工具是否启用
@@ -240,7 +242,9 @@ class EmailTool(BaseTool):
 
     @staticmethod
     def _normalize_recipients(value: Any) -> list[str]:
-        """把工具入参中的收件人统一清洗为邮箱列表。"""
+        """目的：兼容逗号分隔字符串和列表形式的收件人输入。
+        结果：返回去空白后的邮箱列表，非法输入抛出异常。
+        """
         if isinstance(value, str):
             recipients = [item.strip() for item in value.split(",")]
         elif isinstance(value, list):
@@ -251,7 +255,9 @@ class EmailTool(BaseTool):
 
     @staticmethod
     def _required_text(value: Any, field_name: str) -> str:
-        """读取必填文本入参，避免 None 继续进入 SMTP 层。"""
+        """目的：阻止空主题或空正文继续进入 SMTP 发送层。
+        结果：返回清洗后的字符串，空值抛出 ValueError。
+        """
         text = str(value or "").strip()
         if not text:
             raise ValueError(f"{field_name}不能为空")
@@ -259,7 +265,9 @@ class EmailTool(BaseTool):
 
     @staticmethod
     def _optional_text(value: Any) -> str | None:
-        """读取可选文本入参。"""
+        """目的：统一处理可选 HTML 正文等可空字段。
+        结果：返回清洗后的字符串或 None。
+        """
         if value is None:
             return None
         text = str(value).strip()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agents.workflows.compiler import initialize_graph_resources, shutdown_graph_resources
 from api import api_router
+from api.deps import GUEST_DEBUG_HEADER_NAMES
+from api.exception_handlers import register_exception_handlers
 from core import build_app_container, get_settings
 from core.startup_probe import run_startup_probes
 from observability import (
@@ -17,6 +20,7 @@ from observability import (
     register_logging_middleware,
     setup_logging,
 )
+from persistence.db_base import ensure_local_database_schema
 from security import ApiKeyMiddleware
 
 logger = logging.getLogger(__name__)
@@ -31,13 +35,17 @@ async def lifespan(application: FastAPI):
     """
     settings = get_settings()
     setup_logging(app_env=settings.app_env)
+    quota_source = ".env/process-env" if "guest_daily_message_limit" in settings.model_fields_set else "python-default"
+    logger.info(
+        "配置加载完成: guest_daily_message_limit=%d, source=%s, pid=%s, note=修改限额后请重启当前后端进程",
+        settings.guest_daily_message_limit,
+        quota_source,
+        os.getpid(),
+    )
     get_langsmith_service().configure_environment()
     owns_container = False
 
-    try:
-        await initialize_graph_resources()
-    except Exception as exc:  # pragma: no cover
-        logger.warning("LangGraph 初始化失败，将按降级模式运行: %s", exc)
+    await initialize_graph_resources()
 
     startup_probe_results = await run_startup_probes(settings)
     application.state.startup_probe_results = [item.to_dict() for item in startup_probe_results]
@@ -48,6 +56,7 @@ async def lifespan(application: FastAPI):
     )
 
     if not hasattr(application.state, "container"):
+        ensure_local_database_schema()
         application.state.container = build_app_container(settings)
         owns_container = True
 
@@ -76,6 +85,7 @@ def create_app() -> FastAPI:
     )
 
     register_logging_middleware(application)
+    register_exception_handlers(application)
     application.add_middleware(ApiKeyMiddleware)
     application.add_middleware(
         CORSMiddleware,
@@ -84,6 +94,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=GUEST_DEBUG_HEADER_NAMES,
     )
     application.include_router(api_router)
     return application
@@ -99,7 +110,8 @@ if __name__ == "__main__":
     uvicorn.run(
         "app:app",
         host="127.0.0.1",
-        port=8000,
+        port=8081,
         reload=False,
+        loop="core.event_loop:windows_compatible_loop_factory",
         log_level="debug" if settings.debug else "info",
     )

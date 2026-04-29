@@ -6,12 +6,12 @@ from pathlib import Path
 
 
 class KnowledgeDataLoader:
-    """负责枚举知识文件并做轻量文本清洗。
-
-    目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
+    """目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
     结果：相关模块可以围绕该对象稳定协作，提升代码可读性和可维护性。
     """
 
+    # 目的：保存 SUPPORTED_SUFFIXES 字段，用于 KnowledgeDataLoader 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUPPORTED_SUFFIXES 值。
     SUPPORTED_SUFFIXES = {
         ".md",
         ".markdown",
@@ -25,9 +25,7 @@ class KnowledgeDataLoader:
     }
 
     def iter_supported_files(self, directory: str | Path) -> list[Path]:
-        """返回目录下所有支持的知识文件。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         dir_path = Path(directory)
@@ -42,9 +40,7 @@ class KnowledgeDataLoader:
         )
 
     def clean_text(self, text: str) -> str:
-        """做最小必要的空白清洗。
-
-        目的：统一处理输入值的边界情况、格式约束和清洗规则。
+        """目的：统一处理输入值的边界情况、格式约束和清洗规则。
         结果：返回满足约束的结果，避免脏数据影响后续逻辑。
         """
         return "\n".join(line.rstrip() for line in text.replace("\r\n", "\n").splitlines()).strip()

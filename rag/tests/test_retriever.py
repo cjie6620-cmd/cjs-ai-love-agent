@@ -11,9 +11,10 @@ class _DummyEmbeddingService:
 
 
 class _DummyVectorClient:
-    def search_knowledge(self, query_embedding, *, top_k: int, category: str | None, chunk_role: str):
+    def search_knowledge(self, query_embedding, *, top_k: int, category: str | None, chunk_role: str, tenant_id: str):
         del query_embedding, top_k, category
         assert chunk_role == "child"
+        assert tenant_id == "default"
         return [
             {
                 "id": "row-1",
@@ -49,7 +50,8 @@ class _DummyVectorClient:
             },
         ]
 
-    def get_parent_chunks(self, parent_ids):
+    def get_parent_chunks(self, parent_ids, *, tenant_id: str):
+        assert tenant_id == "default"
         rows = {
             "p1": {
                 "title": "沟通手册",
@@ -82,8 +84,9 @@ class _DummyVectorClient:
 
 
 class _DummyLexicalRetriever:
-    async def search(self, query: str, *, top_k: int, category: str | None):
+    async def search(self, query: str, *, top_k: int, category: str | None, tenant_id: str):
         del query, top_k, category
+        assert tenant_id == "default"
         return [
             RetrievalResult(
                 chunk_id="c2",

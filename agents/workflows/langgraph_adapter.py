@@ -11,10 +11,10 @@ import logging
 from collections.abc import AsyncIterator
 
 from contracts.chat import (
+    ConversationContext,
     ChatRequest,
     ChatResponse,
     ChatTrace,
-    ConversationHistoryMessage,
 )
 from observability import TraceSanitizer, get_langsmith_service, traceable_chain
 from stream import format_sse_event
@@ -46,16 +46,16 @@ logger = logging.getLogger(__name__)
 
 
 def _aggregate_stream_chunks(outputs: list[str]) -> str:
-    """_aggregate_stream_chunks 方法。
-    
-    目的：执行_aggregate_stream_chunks 方法相关逻辑。
+    """目的：执行_aggregate_stream_chunks 方法相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     return "".join(outputs)
 
 
 def _iter_text_chunks(text: str, *, chunk_size: int = 8) -> list[str]:
-    """把最终文本切成小块，保持前端打字机体验。"""
+    """目的：把一次性生成的最终回复拆成前端可逐步展示的 token-like 片段。
+    结果：返回按固定长度切分后的字符串列表。
+    """
     if not text:
         return []
     return [text[index:index + chunk_size] for index in range(0, len(text), chunk_size)]
@@ -63,19 +63,17 @@ def _iter_text_chunks(text: str, *, chunk_size: int = 8) -> list[str]:
 
 def _build_initial_state(
     request: ChatRequest,
-    recent_messages: list[ConversationHistoryMessage] | None,
+    conversation_context: ConversationContext | None,
     *,
     risk_level: str,
     langsmith_metadata: dict[str, object] | None,
 ) -> CompanionState:
-    """从 ChatRequest 构建 LangGraph 初始状态。
-    
-    目的：执行从 ChatRequest 构建 LangGraph 初始状态相关逻辑。
+    """目的：执行从 ChatRequest 构建 LangGraph 初始状态相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     return CompanionState(
         request=request,
-        recent_messages=recent_messages,
+        conversation_context=conversation_context,
         safety_level="low",  # 由 safety_check 节点更新
         advisor_draft=None,
         memory_hits=[],
@@ -107,9 +105,7 @@ def _state_to_response(
     state: CompanionState,
     request: ChatRequest,
 ) -> ChatResponse:
-    """从最终状态构建 ChatResponse。
-    
-    目的：执行从最终状态构建 ChatResponse相关逻辑。
+    """目的：执行从最终状态构建 ChatResponse相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     trace = ChatTrace(
@@ -136,16 +132,12 @@ def _state_to_response(
 
 
 class CompanionGraphWorkflow:
-    """LangGraph 驱动的对话工作流：委托给编译后的 StateGraph。
-
-    目的：定义运行时依赖或协作边界，统一工作流节点之间的调用约束。
+    """目的：定义运行时依赖或协作边界，统一工作流节点之间的调用约束。
     结果：相关模块可以围绕相同接口稳定协作，降低接入和替换成本。
     """
 
     def __init__(self, runtime: WorkflowRuntime | None = None) -> None:
-        """初始化 CompanionGraphWorkflow。
-        
-        目的：初始化CompanionGraphWorkflow所需的依赖、配置和初始状态。
+        """目的：初始化CompanionGraphWorkflow所需的依赖、配置和初始状态。
         结果：实例创建完成后可直接参与后续业务流程。
         """
         self.runtime = runtime or build_workflow_runtime()
@@ -155,18 +147,16 @@ class CompanionGraphWorkflow:
         self,
         request: ChatRequest,
         *,
-        recent_messages: list[ConversationHistoryMessage] | None = None,
+        conversation_context: ConversationContext | None = None,
         risk_level: str = "low",
         langsmith_metadata: dict[str, object] | None = None,
     ) -> ChatResponse:
-        """执行非流式对话工作流（LangGraph ainvoke）。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         initial_state = _build_initial_state(
             request,
-            recent_messages,
+            conversation_context,
             risk_level=risk_level,
             langsmith_metadata=langsmith_metadata,
         )
@@ -212,18 +202,16 @@ class CompanionGraphWorkflow:
         self,
         request: ChatRequest,
         *,
-        recent_messages: list[ConversationHistoryMessage] | None = None,
+        conversation_context: ConversationContext | None = None,
         risk_level: str = "low",
         langsmith_metadata: dict[str, object] | None = None,
     ) -> AsyncIterator[str]:
-        """执行流式对话工作流。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         initial_state = _build_initial_state(
             request,
-            recent_messages,
+            conversation_context,
             risk_level=risk_level,
             langsmith_metadata=langsmith_metadata,
         )
@@ -356,6 +344,9 @@ class CompanionGraphWorkflow:
                 ]
                 yield self._format_sse("done", response.model_dump())
 
+        except asyncio.CancelledError:
+            logger.info("LangGraph 流式工作流已取消: session=%s", request.session_id)
+            raise
         except Exception as exc:
             logger.error("LangGraph 流式工作流执行失败: %s", exc)
             yield self._format_sse("error", {"message": str(exc)})
@@ -364,9 +355,7 @@ class CompanionGraphWorkflow:
 
     @staticmethod
     def _format_sse(event: str, payload: dict[str, object]) -> str:
-        """格式化 SSE 事件数据，保持现有聊天接口协议不变。
-
-        目的：按约定协议整理输出内容，统一格式细节。
+        """目的：按约定协议整理输出内容，统一格式细节。
         结果：返回格式一致的结果，降低上下游对接成本。
         """
         return format_sse_event(event, payload)

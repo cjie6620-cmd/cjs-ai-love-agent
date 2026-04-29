@@ -57,6 +57,11 @@ async def test_companion_workflow_stream_emits_multiple_token_events(monkeypatch
     monkeypatch.setattr(workflow_module, "build_reply_generation_context", lambda state: (_FakePromptSpec(), None))
     monkeypatch.setattr(workflow_module, "finalize_advisor", lambda state: {"advisor": None})
     monkeypatch.setattr(workflow_module, "output_guard", lambda state: {})
+    monkeypatch.setattr(
+        workflow_module.compiler,
+        "get_compiled_graph",
+        lambda: SimpleNamespace(),
+    )
 
     runtime = SimpleNamespace(build_llm_client=lambda: _FakeLlmClient())
     workflow = CompanionGraphWorkflow(runtime=runtime)

@@ -10,16 +10,12 @@ from .models import ConversationSession, SafetyEvent, User
 
 
 class SafetyEventRepository:
-    """负责持久化安全审计事件。
-
-    目的：封装持久化读写逻辑，隔离数据库访问细节和查询实现。
+    """目的：封装持久化读写逻辑，隔离数据库访问细节和查询实现。
     结果：业务层可以通过统一仓储接口完成数据操作，降低存储实现耦合。
     """
 
     def __init__(self, session_factory: sessionmaker[Session] | None = None) -> None:
-        """初始化 SafetyEventRepository。
-        
-        目的：初始化SafetyEventRepository所需的依赖、配置和初始状态。
+        """目的：初始化SafetyEventRepository所需的依赖、配置和初始状态。
         结果：实例创建完成后可直接参与后续业务流程。
         """
         self.session_factory = session_factory or get_session_factory()
@@ -36,9 +32,7 @@ class SafetyEventRepository:
         action: str,
         detail_json: dict[str, object] | None = None,
     ) -> None:
-        """写入一条安全审计事件。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         with self.session_factory() as session:
@@ -62,6 +56,9 @@ class SafetyEventRepository:
             session.commit()
 
     def _get_or_create_user(self, session: Session, external_user_id: str) -> User:
+        """目的：确保安全审计事件能关联到内部用户记录。
+        结果：返回已有或新建的 User 实体。
+        """
         statement = select(User).where(User.external_user_id == external_user_id)
         user = session.scalar(statement)
         if user is not None:
@@ -78,6 +75,9 @@ class SafetyEventRepository:
         user_id: str,
         conversation_id: str | None,
     ) -> str | None:
+        """目的：校验传入会话是否属于当前用户，避免安全事件错挂到他人会话。
+        结果：返回合法会话 ID，不存在或不匹配时返回 None。
+        """
         if not conversation_id:
             return None
         statement = select(ConversationSession.id).where(

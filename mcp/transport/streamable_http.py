@@ -27,9 +27,7 @@ _SESSION_HEADER = "Mcp-Session-Id"
 
 
 class McpStreamableHttpTransport(BaseMcpTransport):
-    """基于 Streamable HTTP 的 MCP 传输客户端实现。
-
-    目的：封装 HTTP 传输细节，提供面向业务的工具调用接口。
+    """目的：封装 HTTP 传输细节，提供面向业务的工具调用接口。
     结果：调用方可像使用本地服务一样调用远程 MCP 工具，传输细节对上层透明。
     """
 
@@ -44,9 +42,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
         client_name: str = "ai-love",
         client_version: str = "1.0.0",
     ) -> None:
-        """初始化 HTTP 传输客户端。
-
-        目的：配置客户端连接参数，支持自定义 HTTP 客户端和认证信息。
+        """目的：配置客户端连接参数，支持自定义 HTTP 客户端和认证信息。
         结果：创建可复用的传输实例，支持会话保持和长连接。
         """
         self.mcp_url = mcp_url.rstrip("/")
@@ -62,9 +58,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
         self._protocol_version = _PROTOCOL_VERSION
 
     async def list_tools(self) -> list[McpTool]:
-        """获取 MCP 服务器上注册的所有工具列表。
-
-        目的：发现服务端提供的可用工具及其元数据。
+        """目的：发现服务端提供的可用工具及其元数据。
         结果：返回工具列表，包含每个工具的名称、描述和输入参数模式。
         """
         await self._ensure_initialized()
@@ -88,9 +82,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        """调用指定工具并传入参数。
-
-        目的：执行远程工具逻辑并获取执行结果。
+        """目的：执行远程工具逻辑并获取执行结果。
         结果：返回工具执行结果字典，包含内容列表和错误状态字段。
         """
         await self._ensure_initialized()
@@ -113,16 +105,12 @@ class McpStreamableHttpTransport(BaseMcpTransport):
         return result
 
     async def open_event_stream(self) -> AsyncIterator[dict[str, Any]]:
-        """打开服务端事件流订阅通道。
-
-        目的：建立长连接以接收服务端主动推送的事件消息。
+        """目的：建立长连接以接收服务端主动推送的事件消息。
         结果：返回异步迭代器，调用方可遍历接收服务端事件数据。
         """
         await self._ensure_initialized()
         async def iterator() -> AsyncIterator[dict[str, Any]]:
-            """内部事件迭代器，负责解析 SSE 数据并逐条 yield。
-
-            目的：封装迭代逻辑，确保响应资源在迭代结束后被正确释放。
+            """目的：封装迭代逻辑，确保响应资源在迭代结束后被正确释放。
             结果：遍历完所有事件或异常退出时，自动关闭 HTTP 连接。
             """
             try:
@@ -148,9 +136,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
         return iterator()
 
     async def close(self) -> None:
-        """关闭传输连接和会话。
-
-        目的：安全终止会话，通知服务端释放资源，并关闭 HTTP 客户端。
+        """目的：安全终止会话，通知服务端释放资源，并关闭 HTTP 客户端。
         结果：连接关闭，所有待处理的请求完成或取消，客户端资源释放。
         """
         if self._session_id:
@@ -171,9 +157,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
             await self._client.aclose()
 
     async def _ensure_initialized(self) -> None:
-        """确保会话已初始化。
-
-        目的：延迟初始化会话，避免构造函数时立即建立连接。
+        """目的：延迟初始化会话，避免构造函数时立即建立连接。
         结果：首次调用时执行握手协议，后续调用直接返回已初始化状态。
         """
         if self._initialized:
@@ -210,9 +194,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
         self._initialized = True
 
     async def _send_notification(self, method: str) -> None:
-        """发送无响应的通知消息。
-
-        目的：向服务端发送单方向通知，无需等待响应。
+        """目的：向服务端发送单方向通知，无需等待响应。
         结果：服务端收到通知并执行相应动作，本端不阻塞等待回复。
         """
         payload = [{
@@ -240,9 +222,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
         include_session: bool = True,
         capture_session: bool = False,
     ) -> list[dict[str, Any]]:
-        """发送 JSON-RPC 请求并接收响应。
-
-        目的：封装请求发送和响应接收的完整流程，处理会话管理和流式响应。
+        """目的：封装请求发送和响应接收的完整流程，处理会话管理和流式响应。
         结果：返回解析后的响应数据列表，支持批量请求场景。
         """
         try:
@@ -263,9 +243,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
             raise McpTransportError(f"MCP 请求失败: {exc}") from exc
 
     def _build_headers(self, *, include_session: bool = True) -> dict[str, str]:
-        """构建 HTTP 请求头。
-
-        目的：统一组装认证信息、会话标识和协议版本等请求头。
+        """目的：统一组装认证信息、会话标识和协议版本等请求头。
         结果：返回完整的请求头字典，用于 HTTP 请求。
         """
         headers = {
@@ -281,9 +259,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
         return headers
 
     async def _read_response_payloads(self, response: httpx.Response) -> list[dict[str, Any]]:
-        """读取并解析 HTTP 响应内容。
-
-        目的：自动识别响应类型（JSON 或 SSE），统一转换为标准格式。
+        """目的：自动识别响应类型（JSON 或 SSE），统一转换为标准格式。
         结果：返回解析后的字典列表，支持单条或批量响应。
         """
         content_type = response.headers.get("content-type", "").lower()
@@ -303,9 +279,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
             raise McpProtocolError("MCP 响应不是合法 JSON") from exc
 
     async def _iter_sse_payloads(self, response: httpx.Response) -> AsyncIterator[Any]:
-        """迭代解析 Server-Sent Events 格式的响应流。
-
-        目的：将 SSE 格式的流式数据拆分为独立的 JSON 事件。
+        """目的：将 SSE 格式的流式数据拆分为独立的 JSON 事件。
         结果：逐个 yield 解析后的事件数据对象。
         """
         data_lines: list[str] = []
@@ -331,9 +305,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
 
     @staticmethod
     def _consume_sse_event(data_lines: list[str]) -> Any | None:
-        """解析 SSE 事件数据块。
-
-        目的：将多行 data 字段合并后解析为 JSON 对象。
+        """目的：将多行 data 字段合并后解析为 JSON 对象。
         结果：返回解析后的对象，或在遇到 [DONE] 标记时返回 None。
         """
         if not data_lines:
@@ -348,9 +320,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
 
     @staticmethod
     def _normalize_payload(payload: Any) -> list[dict[str, Any]]:
-        """规范化响应载荷格式。
-
-        目的：统一处理单条字典或字典列表两种响应格式。
+        """目的：统一处理单条字典或字典列表两种响应格式。
         结果：返回统一格式的字典列表，便于后续处理。
         """
         if isinstance(payload, dict):
@@ -364,9 +334,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
         payloads: list[dict[str, Any]],
         msg_id: str,
     ) -> dict[str, Any]:
-        """根据消息 ID 查找匹配的响应。
-
-        目的：在响应列表中定位对应请求的响应数据。
+        """目的：在响应列表中定位对应请求的响应数据。
         结果：返回匹配的响应字典，未找到时抛出协议错误。
         """
         for item in payloads:
@@ -375,9 +343,7 @@ class McpStreamableHttpTransport(BaseMcpTransport):
         raise McpProtocolError("MCP 响应中未找到匹配的 request id")
 
     def _raise_for_status(self, response: httpx.Response) -> None:
-        """根据 HTTP 状态码抛出相应异常。
-
-        目的：将 HTTP 错误转换为业务异常，提供更有意义的错误信息。
+        """目的：将 HTTP 错误转换为业务异常，提供更有意义的错误信息。
         结果：404 且存在会话时表示会话过期，其他状态码触发标准异常。
         """
         if response.status_code == 404 and self._session_id:

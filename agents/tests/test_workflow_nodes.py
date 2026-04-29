@@ -1,6 +1,6 @@
-from contracts.chat import KnowledgeEvidence
+from contracts.chat import ConversationContext, ConversationHistoryMessage, KnowledgeEvidence
 
-from agents.workflows.nodes import build_local_chat_reply
+from agents.workflows.nodes import _convert_to_llm_history, build_local_chat_reply
 
 
 def test_build_local_chat_reply_populates_deterministic_fields() -> None:
@@ -44,3 +44,24 @@ def test_build_local_chat_reply_marks_no_grounding_fallback() -> None:
     assert result.needs_followup is True
     assert result.fallback_reason == "no_grounding"
     assert result.used_evidence_ids == []
+
+
+def test_convert_to_llm_history_marks_interrupted_assistant_reply() -> None:
+    """中断 assistant 回复进入 LLM history 时应带上可续写说明。"""
+    context = ConversationContext(
+        recent_messages=[
+            ConversationHistoryMessage(
+                id="m1",
+                role="assistant",
+                content="我先写到这里",
+                reply_status="interrupted",
+            )
+        ]
+    )
+
+    history = _convert_to_llm_history(context)
+
+    assert history is not None
+    assert history[0]["role"] == "assistant"
+    assert "上一轮 assistant 回复被用户手动终止" in history[0]["content"]
+    assert "我先写到这里" in history[0]["content"]

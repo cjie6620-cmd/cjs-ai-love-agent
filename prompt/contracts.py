@@ -13,19 +13,19 @@ from dataclasses import dataclass, field, replace
 
 @dataclass(slots=True)
 class PromptSection:
-    """Prompt 片段：每个片段都有稳定名称，便于渲染和调试。
-
-    目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
+    """目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
     结果：相关模块可以围绕该对象稳定协作，提升代码可读性和可维护性。
     """
 
+    # 目的：保存 name 字段，用于 PromptSection 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 name 值。
     name: str
+    # 目的：保存 content 字段，用于 PromptSection 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 content 值。
     content: str
 
     def render(self) -> str:
-        """执行 render 方法。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         body = self.content.strip() or "无"
@@ -34,24 +34,34 @@ class PromptSection:
 
 @dataclass(slots=True)
 class PromptSpec:
-    """结构化 Prompt 描述对象。
-
-    目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
+    """目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
     结果：相关模块可以围绕该对象稳定协作，提升代码可读性和可维护性。
     """
 
+    # 目的：保存 name 字段，用于 PromptSpec 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 name 值。
     name: str
+    # 目的：保存 prompt_version 字段，用于 PromptSpec 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 prompt_version 值。
     prompt_version: str
+    # 目的：保存 output_schema_name 字段，用于 PromptSpec 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 output_schema_name 值。
     output_schema_name: str
+    # 目的：保存 output_contract_version 字段，用于 PromptSpec 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 output_contract_version 值。
     output_contract_version: str = "v1"
+    # 目的：保存 system_sections 字段，用于 PromptSpec 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 system_sections 值。
     system_sections: list[PromptSection] = field(default_factory=list)
+    # 目的：保存 user_sections 字段，用于 PromptSpec 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 user_sections 值。
     user_sections: list[PromptSection] = field(default_factory=list)
+    # 目的：保存 fallback_policy 字段，用于 PromptSpec 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 fallback_policy 值。
     fallback_policy: str = ""
 
     def with_examples_section(self, content: str) -> "PromptSpec":
-        """在 system sections 中稳定插入 examples 段。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         sections = [section for section in self.system_sections if section.name != "examples"]
@@ -64,9 +74,7 @@ class PromptSpec:
         return replace(self, system_sections=sections)
 
     def render_system_prompt(self) -> str:
-        """渲染系统提示词。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         header = (
@@ -78,18 +86,14 @@ class PromptSpec:
         return self._render(header, self.system_sections)
 
     def render_user_prompt(self) -> str:
-        """渲染用户提示词。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         header = "请严格基于以下上下文完成本轮任务。"
         return self._render(header, self.user_sections)
 
     def _render(self, header: str, sections: list[PromptSection]) -> str:
-        """执行 _render 方法。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         rendered = [header.strip()]

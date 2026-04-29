@@ -1,4 +1,8 @@
-"""Elasticsearch 关键词召回。"""
+"""Elasticsearch 关键词召回。
+
+目的：提供基于 BM25 的关键词召回能力，补充向量召回的语义盲区。
+结果：混合检索链路可以获得结构化的 RetrievalResult 列表。
+"""
 
 from __future__ import annotations
 
@@ -15,18 +19,27 @@ logger = logging.getLogger(__name__)
 
 
 class LexicalRetriever:
-    """基于 Elasticsearch 的 BM25 召回。"""
+    """目的：封装 ES 索引创建、文档写入、删除和检索细节。
+    结果：上层 RAG 管道可以用统一接口完成关键词召回。
+    """
 
     def __init__(self, settings: Settings | None = None) -> None:
+        """目的：注入或读取 Elasticsearch 相关配置。
+        结果：实例具备创建客户端和访问目标索引的配置。
+        """
         self.settings = settings or get_settings()
 
     async def ensure_index(self) -> None:
-        """确保索引存在。"""
+        """目的：在写入文档前创建包含中文分词字段的 ES 索引。
+        结果：目标索引存在；已存在时直接返回。
+        """
         payload = {
             "settings": {"number_of_shards": 1, "number_of_replicas": 0},
             "mappings": {
                 "properties": {
                     "doc_id": {"type": "keyword"},
+                    "tenant_id": {"type": "keyword"},
+                    "document_id": {"type": "keyword"},
                     "parent_id": {"type": "keyword"},
                     "chunk_id": {"type": "keyword"},
                     "title": {"type": "text", "analyzer": "ik_max_word", "search_analyzer": "ik_smart"},
@@ -57,10 +70,15 @@ class LexicalRetriever:
         category: str | None = None,
         filename: str | None = None,
         doc_id: str | None = None,
+        tenant_id: str = "default",
     ) -> int:
-        """按文档范围删除索引。"""
+        """目的：重建知识文档前清理同来源、分类和 doc_id 的旧关键词索引。
+        结果：返回 ES 删除的文档数量。
+        """
         del filename
-        filters: list[dict[str, Any]] = [{"term": {"source": source}}]
+        filters: list[dict[str, Any]] = [{"term": {"tenant_id": tenant_id}}]
+        if source:
+            filters.append({"term": {"source": source}})
         if category:
             filters.append({"term": {"category": category}})
         if doc_id:
@@ -79,7 +97,9 @@ class LexicalRetriever:
             return int(payload.get("deleted", 0))
 
     async def index_documents(self, documents: list[dict[str, Any]]) -> int:
-        """批量写入 child chunk 到 ES。"""
+        """目的：把切片后的子块写入 BM25 索引，支持关键词召回。
+        结果：返回成功提交的文档数量，bulk 失败时抛出异常。
+        """
         if not documents:
             return 0
         await self.ensure_index()
@@ -108,12 +128,15 @@ class LexicalRetriever:
         *,
         top_k: int,
         category: str | None = None,
+        tenant_id: str = "default",
     ) -> list[RetrievalResult]:
-        """执行 BM25 检索。"""
+        """目的：按查询文本和可选分类从 ES 中召回关键词相关的 child chunk。
+        结果：返回标准 RetrievalResult 列表，异常时降级为空列表。
+        """
         if not query.strip():
             return []
 
-        filters: list[dict[str, Any]] = []
+        filters: list[dict[str, Any]] = [{"term": {"tenant_id": tenant_id}}]
         if category:
             filters.append({"term": {"category": category}})
 
@@ -166,6 +189,9 @@ class LexicalRetriever:
         return results
 
     def _client(self) -> httpx.AsyncClient:
+        """目的：按配置组装 base_url、认证信息和超时时间。
+        结果：返回可用于当前操作的 AsyncClient。
+        """
         auth = None
         if self.settings.es_username:
             auth = (self.settings.es_username, self.settings.es_password)

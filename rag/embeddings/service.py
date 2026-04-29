@@ -21,18 +21,14 @@ _CACHE_TTL_SECONDS = 60.0  # 缓存有效期 60 秒
 
 
 def _get_cache_key(text: str) -> str:
-    """计算文本的缓存 key，使用 SHA256 哈希避免存储大文本。
-    
-    目的：执行计算文本的缓存 key，使用 SHA256 哈希避免存储大文本相关逻辑。
+    """目的：执行计算文本的缓存 key，使用 SHA256 哈希避免存储大文本相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
 
 
 def _cache_get(key: str) -> list[float] | None:
-    """从全局缓存读取嵌入向量，TTL 过期返回 None。
-    
-    目的：执行从全局缓存读取嵌入向量，TTL 过期返回 None相关逻辑。
+    """目的：执行从全局缓存读取嵌入向量，TTL 过期返回 None相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     with _CACHE_MX:
@@ -47,9 +43,7 @@ def _cache_get(key: str) -> list[float] | None:
 
 
 def _cache_set(key: str, embedding: list[float]) -> None:
-    """写入全局缓存，超容量时清理最旧的 25% 条目。
-    
-    目的：执行写入全局缓存，超容量时清理最旧的 25% 条目相关逻辑。
+    """目的：执行写入全局缓存，超容量时清理最旧的 25% 条目相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     with _CACHE_MX:
@@ -62,16 +56,12 @@ def _cache_set(key: str, embedding: list[float]) -> None:
 
 
 class EmbeddingService:
-    """文本转向量服务，支持单条和批量嵌入。
-
-    目的：承载聚合后的业务能力，对外暴露稳定且清晰的调用入口。
+    """目的：承载聚合后的业务能力，对外暴露稳定且清晰的调用入口。
     结果：上层模块可以直接复用核心能力，减少重复编排并提升可维护性。
     """
 
     def __init__(self) -> None:
-        """初始化Embedding服务实例。
-
-        目的：接收并保存运行所需的依赖、配置和初始状态。
+        """目的：接收并保存运行所需的依赖、配置和初始状态。
         结果：实例初始化完成，可直接执行后续业务调用。
         """
         self.settings = get_settings()
@@ -81,9 +71,7 @@ class EmbeddingService:
         )
 
     async def embed_text(self, text: str) -> list[float]:
-        """将单条文本转为向量。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         self._check_api_key()
@@ -107,9 +95,7 @@ class EmbeddingService:
         return embedding
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """批量文本转向量，按 ``embedding_batch_size`` 分批调用。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         if not texts:
@@ -152,9 +138,7 @@ class EmbeddingService:
         return all_embeddings
 
     def _check_api_key(self) -> None:
-        """检查 API Key 是否配置，未配置时抛出 RuntimeError。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if not self.settings.xai_api_key:

@@ -1,7 +1,7 @@
 """QuestionAdvisor 单元测试：验证检索查询增强与建议问题生成。"""
 
 from agents.question_advisor import QuestionAdvisor
-from contracts.chat import ConversationHistoryMessage
+from contracts.chat import ConversationContext, ConversationHistoryMessage, SessionSummary
 
 
 def test_build_draft_uses_recent_user_messages() -> None:
@@ -12,13 +12,18 @@ def test_build_draft_uses_recent_user_messages() -> None:
         ConversationHistoryMessage(id="2", role="assistant", content="我在，你愿意慢慢说。"),
         ConversationHistoryMessage(id="3", role="user", content="刚分手两天，总想给她发消息"),
     ]
+    context = ConversationContext(
+        session_summary=SessionSummary(summary_text="用户处在分手后的低落期。"),
+        recent_messages=recent_messages,
+    )
 
     draft = advisor.build_draft(
         message="我现在忍不住想联系她",
         mode="advice",
-        recent_messages=recent_messages,
+        conversation_context=context,
     )
 
+    assert "分手后的低落期" in draft.issue_summary
     assert "今天心情不好" in draft.issue_summary
     assert "刚分手两天" in draft.retrieval_query
     assert "我现在忍不住想联系她" in draft.retrieval_query
@@ -27,7 +32,7 @@ def test_build_draft_uses_recent_user_messages() -> None:
 def test_finalize_returns_suggested_questions_from_topics() -> None:
     """验证 advisor 会根据命中主题生成可直接点击的追问建议。"""
     advisor = QuestionAdvisor()
-    draft = advisor.build_draft(message="分手了", mode="soothing", recent_messages=[])
+    draft = advisor.build_draft(message="分手了", mode="soothing")
 
     payload = advisor.finalize(
         draft=draft,
@@ -49,7 +54,6 @@ def test_finalize_returns_process_and_study_followups() -> None:
     draft = advisor.build_draft(
         message="初级会计职称怎么考",
         mode="advice",
-        recent_messages=[],
     )
 
     payload = advisor.finalize(
@@ -69,7 +73,7 @@ def test_finalize_returns_process_and_study_followups() -> None:
 def test_finalize_returns_cost_followups() -> None:
     """费用类话题应给出谈法、底线和下一步。"""
     advisor = QuestionAdvisor()
-    draft = advisor.build_draft(message="彩礼太高了", mode="advice", recent_messages=[])
+    draft = advisor.build_draft(message="彩礼太高了", mode="advice")
 
     payload = advisor.finalize(
         draft=draft,
@@ -88,7 +92,7 @@ def test_finalize_returns_cost_followups() -> None:
 def test_finalize_returns_troubleshooting_followups() -> None:
     """报错类话题应给出排查、原因和修复下一步。"""
     advisor = QuestionAdvisor()
-    draft = advisor.build_draft(message="启动报错了", mode="advice", recent_messages=[])
+    draft = advisor.build_draft(message="启动报错了", mode="advice")
 
     payload = advisor.finalize(
         draft=draft,

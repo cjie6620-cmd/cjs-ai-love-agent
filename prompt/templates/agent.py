@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from contracts.chat import ChatMode, EvidenceStatus, KnowledgeEvidence, MemoryHit
+from contracts.chat import ChatMode, ConversationContext, EvidenceStatus, KnowledgeEvidence, MemoryHit
 from core.config import get_settings
 from prompt.contracts import PromptSection, PromptSpec
 from prompt.repository import PromptRepository
@@ -12,6 +12,7 @@ _TEXT_PROMPT_VERSION = "chat.reply.v1"
 _TEXT_OUTPUT_CONTRACT_VERSION = "chat_reply_text.v2"
 _TOOL_FINAL_PROMPT_VERSION = "chat.reply.tool_final.v1"
 _TOOL_FINAL_OUTPUT_CONTRACT_VERSION = "chat_reply_structured.v2"
+_INTERRUPTED_ASSISTANT_CONTEXT_PREFIX = "上一轮 assistant 回复被用户手动终止，以下是已生成的部分内容："
 
 _MODE_ROLE_MAP: dict[ChatMode, str] = {
     "companion": "你是温和、稳定、边界清晰的情感陪伴助手。",
@@ -55,31 +56,32 @@ _TOOL_FINAL_FIELD_GUIDE = """请补齐以下字段语义：
 - used_evidence_ids：只填写本次实际依赖的 K 编号，没有就返回空数组"""
 
 
-def _render_history(recent_messages: list[dict[str, str]] | None) -> str:
+def _render_conversation_context(conversation_context: ConversationContext | None) -> str:
+    """目的：把滚动摘要和 token 预算内的最近原文放入同一上下文段。
+    结果：返回模型可直接消费的分层上下文文本。
     """
-    渲染最近对话历史。
+    if conversation_context is None:
+        return "会话摘要：无\n最近对话：无"
 
-    目的：将最近对话列表格式化为可读的提示词片段。
-    结果：返回格式化的对话历史字符串，最多包含4条最近消息。
-    """
-    if not recent_messages:
-        return "最近对话：无"
+    summary = conversation_context.session_summary.summary_text.strip()
+    lines = [f"会话摘要：{summary or '无'}", "最近对话："]
+    if not conversation_context.recent_messages:
+        lines.append("- 无")
+        return "\n".join(lines)
 
-    snippets = []
-    for item in recent_messages[-4:]:
-        role = "用户" if item.get("role") == "user" else "助手"
-        content = str(item.get("content", "")).strip()
+    for item in conversation_context.recent_messages:
+        role = "用户" if item.role == "user" else "助手"
+        content = item.content.strip()
         if not content:
             continue
-        snippets.append(f"- {role}：{content[:120]}")
-    return "\n".join(snippets) or "最近对话：无"
+        if item.role == "assistant" and item.reply_status == "interrupted":
+            content = f"{_INTERRUPTED_ASSISTANT_CONTEXT_PREFIX}\n{content}"
+        lines.append(f"- {role}：{content}")
+    return "\n".join(lines)
 
 
 def _render_memory_hits(memory_hits: list[MemoryHit]) -> str:
-    """
-    渲染长期记忆命中结果。
-
-    目的：将长期记忆检索结果格式化为可读的提示词片段。
+    """目的：将长期记忆检索结果格式化为可读的提示词片段。
     结果：返回格式化的记忆命中字符串，最多包含3条记忆。
     """
     if not memory_hits:
@@ -93,10 +95,7 @@ def _render_memory_hits(memory_hits: list[MemoryHit]) -> str:
 
 
 def _render_knowledge_hits(knowledge_hits: list[str]) -> str:
-    """
-    渲染知识检索命中结果。
-
-    目的：将 RAG 知识检索结果格式化为可读的提示词片段。
+    """目的：将 RAG 知识检索结果格式化为可读的提示词片段。
     结果：返回格式化的知识命中字符串，最多包含4条知识片段。
     """
     if not knowledge_hits:
@@ -109,7 +108,9 @@ def _render_knowledge_hits(knowledge_hits: list[str]) -> str:
 
 
 def _render_knowledge_evidences(knowledge_evidences: list[KnowledgeEvidence]) -> str:
-    """渲染结构化证据对象。"""
+    """目的：把 KnowledgeEvidence 列表压缩成模型可引用的证据编号索引。
+    结果：返回包含 evidence_id、标题、来源和摘要的提示词文本。
+    """
     if not knowledge_evidences:
         return "证据编号：无"
     lines: list[str] = []
@@ -130,10 +131,7 @@ def _build_constraints(
     llm_provider: str,
     structured_fields: bool = False,
 ) -> str:
-    """
-    构建约束条件文本。
-
-    目的：根据对话模式、安全级别和证据状态生成相应的约束条件。
+    """目的：根据对话模式、安全级别和证据状态生成相应的约束条件。
     结果：返回格式化的约束条件字符串。
     """
     constraints = [
@@ -168,14 +166,16 @@ def _build_user_sections(
     mode: ChatMode,
     safety_level: str,
     message: str,
-    recent_messages: list[dict[str, str]] | None,
+    conversation_context: ConversationContext | None,
     memory_hits: list[MemoryHit],
     knowledge_hits: list[str],
     knowledge_evidences: list[KnowledgeEvidence],
     retrieval_query: str,
     evidence_status: EvidenceStatus,
 ) -> list[PromptSection]:
-    """构建聊天主链路共用的上下文段。"""
+    """目的：把用户消息、模式、安全级别、记忆和知识证据组装成 user prompt sections。
+    结果：返回可复用于普通回复和工具终结回复的 PromptSection 列表。
+    """
     return [
         PromptSection(name="context", content=f"用户当前消息：{message.strip()}"),
         PromptSection(
@@ -187,7 +187,7 @@ def _build_user_sections(
                 f"知识证据状态：{evidence_status}"
             ),
         ),
-        PromptSection(name="context", content=_render_history(recent_messages)),
+        PromptSection(name="context", content=_render_conversation_context(conversation_context)),
         PromptSection(name="context", content=f"长期记忆命中：\n{_render_memory_hits(memory_hits)}"),
         PromptSection(name="evidence", content=f"父级上下文：\n{_render_knowledge_hits(knowledge_hits)}"),
         PromptSection(
@@ -203,17 +203,14 @@ def build_chat_reply_prompt_spec(
     safety_level: str,
     llm_provider: str,
     message: str,
-    recent_messages: list[dict[str, str]] | None,
+    conversation_context: ConversationContext | None,
     memory_hits: list[MemoryHit],
     knowledge_hits: list[str],
     knowledge_evidences: list[KnowledgeEvidence],
     retrieval_query: str,
     evidence_status: EvidenceStatus,
 ) -> PromptSpec:
-    """
-    构建聊天主链路 PromptSpec。
-
-    目的：整合对话上下文、长期记忆和知识证据，生成完整的聊天回复提示词。
+    """目的：整合对话上下文、长期记忆和知识证据，生成完整的聊天回复提示词。
     结果：返回可用于生成聊天回复的 PromptSpec 对象。
     """
     settings = get_settings()
@@ -256,7 +253,7 @@ def build_chat_reply_prompt_spec(
         mode=mode,
         safety_level=safety_level,
         message=message,
-        recent_messages=recent_messages,
+        conversation_context=conversation_context,
         memory_hits=memory_hits,
         knowledge_hits=knowledge_hits,
         knowledge_evidences=knowledge_evidences,
@@ -282,7 +279,7 @@ def build_chat_reply_prompt_spec(
             "safety_level": safety_level,
             "llm_provider": llm_provider,
             "message": message.strip(),
-            "recent_messages": _render_history(recent_messages),
+            "conversation_context": _render_conversation_context(conversation_context),
             "memory_hits": _render_memory_hits(memory_hits),
             "knowledge_hits": _render_knowledge_hits(knowledge_hits),
             "knowledge_evidences": _render_knowledge_evidences(knowledge_evidences),
@@ -303,14 +300,16 @@ def build_tool_final_reply_prompt_spec(
     safety_level: str,
     llm_provider: str,
     message: str,
-    recent_messages: list[dict[str, str]] | None,
+    conversation_context: ConversationContext | None,
     memory_hits: list[MemoryHit],
     knowledge_hits: list[str],
     knowledge_evidences: list[KnowledgeEvidence],
     retrieval_query: str,
     evidence_status: EvidenceStatus,
 ) -> PromptSpec:
-    """构建工具 / MCP 终结阶段使用的 structured 输出 PromptSpec。"""
+    """目的：在工具调用完成后，约束模型输出符合 ChatReplyModel 的最终回复。
+    结果：返回可用于 structured 输出的 PromptSpec。
+    """
     del llm_provider
 
     fallback_policy = (
@@ -348,7 +347,7 @@ def build_tool_final_reply_prompt_spec(
         mode=mode,
         safety_level=safety_level,
         message=message,
-        recent_messages=recent_messages,
+        conversation_context=conversation_context,
         memory_hits=memory_hits,
         knowledge_hits=knowledge_hits,
         knowledge_evidences=knowledge_evidences,

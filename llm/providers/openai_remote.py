@@ -6,35 +6,35 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
 
 from openai import AsyncOpenAI, OpenAI
+from pydantic import BaseModel
 
 from llm.core.types import LlmMessage, McpCallInfo
 from llm.providers.base import BaseLLmProvider
+from llm.providers.base import log_llm_request, log_llm_response
 from observability import get_langsmith_service, traceable_tool
 
 if TYPE_CHECKING:
     from core.config import Settings
 
 logger = logging.getLogger(__name__)
+TStructured = TypeVar("TStructured", bound=BaseModel)
 
 
 class DeepseekMcpProvider(BaseLLmProvider):
-    """DeepSeek MCP 提供者：挂载远程 MCP 工具，支持 Tavily 搜索和高德地图。
-    
-    目的：封装DeepSeek MCP 提供者：挂载远程 MCP 工具，支持 Tavily 搜索和高德地图相关的模型或能力实现。
+    """目的：封装DeepSeek MCP 提供者：挂载远程 MCP 工具，支持 Tavily 搜索和高德地图相关的模型或能力实现。
     结果：上层可按统一 Provider 接口发起调用。
     """
 
     def __init__(self, settings: "Settings") -> None:
-        """初始化 DeepseekMcpProvider。
-        
-        目的：初始化DeepseekMcpProvider所需的依赖、配置和初始状态。
+        """目的：初始化DeepseekMcpProvider所需的依赖、配置和初始状态。
         结果：实例创建完成后可直接参与后续业务流程。
         """
         super().__init__(settings)
@@ -54,25 +54,105 @@ class DeepseekMcpProvider(BaseLLmProvider):
         self._mcp_tools = self._build_mcp_tools()
 
     def _get_model_name(self) -> str:
-        """返回当前 Provider 的模型名，供 tokenizer 路由使用。
-
-        目的：按指定条件读取目标数据、资源或结果集合。
+        """目的：按指定条件读取目标数据、资源或结果集合。
         结果：返回可直接消费的查询结果，减少调用方重复处理。
         """
         return self.settings.deepseek_model
 
     def _get_structured_client_options(self) -> dict[str, Any]:
-        """返回工具终结阶段和 memory structured 阶段使用的 ChatOpenAI 配置。"""
+        """目的：为工具终结和 memory structured 调用提供 DeepSeek 兼容 OpenAI 配置。
+        结果：返回模型名、API Key 和 base_url。
+        """
         return {
             "model": self.settings.deepseek_model,
             "api_key": self.settings.deepseek_api_key,
             "base_url": self.settings.deepseek_base_url,
         }
 
-    def _build_mcp_tools(self) -> list[dict[str, Any]]:
-        """根据配置构建 MCP 工具列表。
+    async def _invoke_structured_output(
+        self,
+        messages: list[dict[str, Any]],
+        output_schema: type[TStructured],
+    ) -> TStructured:
+        """目的：通过普通 Chat Completions 获取 JSON，再本地按 Pydantic schema 校验。
+        结果：返回指定 schema 的结构化对象。
+        """
+        if not self.settings.deepseek_api_key:
+            raise RuntimeError("未配置 DEEPSEEK_API_KEY，无法调用 DeepSeek API。")
 
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        schema_json = json.dumps(output_schema.model_json_schema(), ensure_ascii=False)
+        structured_messages = [dict(message) for message in messages]
+        structured_messages.append({
+            "role": "user",
+            "content": (
+                "请严格按下面 JSON Schema 输出一个 JSON 对象，不要输出 Markdown、解释文字或代码块。\n"
+                f"{schema_json}"
+            ),
+        })
+
+        started_at = log_llm_request(
+            logger,
+            provider="DeepseekMcpProvider",
+            stage=f"structured.{output_schema.__name__}",
+            model=self.settings.deepseek_model,
+            stream=False,
+            request={
+                "model": self.settings.deepseek_model,
+                "messages": structured_messages,
+                "temperature": 0,
+                "output_schema": output_schema.model_json_schema(),
+            },
+        )
+        completion_create = cast(Any, self._async_client.chat.completions.create)
+        response = await completion_create(
+            model=self.settings.deepseek_model,
+            messages=structured_messages,
+            temperature=0,
+        )
+        content = response.choices[0].message.content or ""
+        result = output_schema.model_validate(self._parse_json_object(content))
+        log_llm_response(
+            logger,
+            provider="DeepseekMcpProvider",
+            stage=f"structured.{output_schema.__name__}",
+            model=self.settings.deepseek_model,
+            stream=False,
+            request_started_at=started_at,
+            response={
+                "content": content,
+                "parsed": result.model_dump(),
+            },
+        )
+        return result
+
+    def _parse_json_object(self, content: str) -> dict[str, Any]:
+        """目的：兼容模型返回 Markdown 代码块或前后夹杂文本的情况。
+        结果：返回可用于 Pydantic 校验的 JSON 字典。
+        """
+        text = content.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip().startswith("```"):
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            start = text.find("{")
+            end = text.rfind("}")
+            if start < 0 or end <= start:
+                raise
+            payload = json.loads(text[start:end + 1])
+
+        if not isinstance(payload, dict):
+            raise ValueError("结构化输出必须是 JSON 对象")
+        return payload
+
+    def _build_mcp_tools(self) -> list[dict[str, Any]]:
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         tools: list[dict[str, Any]] = []
@@ -155,9 +235,7 @@ class DeepseekMcpProvider(BaseLLmProvider):
         return tools
 
     def _build_mcp_system_prompt(self, base_system_prompt: str) -> str:
-        """将 MCP 工具使用策略注入系统提示词。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         tools_section = ""
@@ -197,9 +275,7 @@ class DeepseekMcpProvider(BaseLLmProvider):
         error_message: str = "",
         output_summary: str = "",
     ) -> None:
-        """追加目标数据到结果集合。
-
-        目的：持久化、上传或补充目标数据，保持状态同步。
+        """目的：持久化、上传或补充目标数据，保持状态同步。
         结果：相关数据被成功写入或更新，便于后续流程继续使用。
         """
         self._mcp_calls.append(McpCallInfo(
@@ -218,9 +294,7 @@ class DeepseekMcpProvider(BaseLLmProvider):
         tool_name: str,
         tool_args: dict[str, Any],
     ) -> str:
-        """调用 MCP 工具并返回结果。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         start_time = time.monotonic()
@@ -350,9 +424,7 @@ class DeepseekMcpProvider(BaseLLmProvider):
         *,
         history: list[LlmMessage] | None = None,
     ) -> tuple[str, list[McpCallInfo]]:
-        """非流式生成（DeepSeek Chat API）。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         if not self.settings.deepseek_api_key:
@@ -371,6 +443,20 @@ class DeepseekMcpProvider(BaseLLmProvider):
         try:
             for iteration in range(max_iterations):
                 # 调用 Chat Completions API
+                request_payload = {
+                    "model": self.settings.deepseek_model,
+                    "messages": messages,
+                    "tools": self._mcp_tools if self._mcp_tools else None,
+                    "temperature": 0.7,
+                }
+                request_started_at = log_llm_request(
+                    logger,
+                    provider="DeepseekMcpProvider",
+                    stage=f"chat.generate.round_{iteration + 1}",
+                    model=self.settings.deepseek_model,
+                    stream=False,
+                    request=request_payload,
+                )
                 completion_create = cast(Any, self._sync_client.chat.completions.create)
                 response = completion_create(
                     model=self.settings.deepseek_model,
@@ -380,20 +466,33 @@ class DeepseekMcpProvider(BaseLLmProvider):
                 )
 
                 assistant_message = response.choices[0].message
+                response_tool_calls = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in (assistant_message.tool_calls or [])
+                ]
+                log_llm_response(
+                    logger,
+                    provider="DeepseekMcpProvider",
+                    stage=f"chat.generate.round_{iteration + 1}",
+                    model=self.settings.deepseek_model,
+                    stream=False,
+                    request_started_at=request_started_at,
+                    response={
+                        "content": assistant_message.content or "",
+                        "tool_calls": response_tool_calls,
+                    },
+                )
                 messages.append({
                     "role": "assistant",
                     "content": assistant_message.content,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
-                            }
-                        }
-                        for tc in (assistant_message.tool_calls or [])
-                    ] if assistant_message.tool_calls else None,
+                    "tool_calls": response_tool_calls if assistant_message.tool_calls else None,
                 })
 
                 # 检查是否有工具调用
@@ -467,9 +566,7 @@ class DeepseekMcpProvider(BaseLLmProvider):
         *,
         history: list[LlmMessage] | None = None,
     ) -> AsyncIterator[tuple[str, list[McpCallInfo]]]:
-        """流式生成（DeepSeek Chat API SSE 格式）。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         if not self.settings.deepseek_api_key:
@@ -485,10 +582,26 @@ class DeepseekMcpProvider(BaseLLmProvider):
         max_iterations = 5
         used_tools = False
 
+        stream = None
         try:
-            for _ in range(max_iterations):
-                completion_create = cast(Any, self._sync_client.chat.completions.create)
-                stream = completion_create(
+            for round_index in range(max_iterations):
+                completion_create = cast(Any, self._async_client.chat.completions.create)
+                request_payload = {
+                    "model": self.settings.deepseek_model,
+                    "messages": messages,
+                    "tools": self._mcp_tools if self._mcp_tools else None,
+                    "temperature": 0.7,
+                    "stream": True,
+                }
+                request_started_at = log_llm_request(
+                    logger,
+                    provider="DeepseekMcpProvider",
+                    stage=f"chat.stream.round_{round_index + 1}",
+                    model=self.settings.deepseek_model,
+                    stream=True,
+                    request=request_payload,
+                )
+                stream = await completion_create(
                     model=self.settings.deepseek_model,
                     messages=messages,
                     tools=self._mcp_tools if self._mcp_tools else None,
@@ -499,33 +612,52 @@ class DeepseekMcpProvider(BaseLLmProvider):
                 buffered_tokens: list[str] = []
                 tool_calls_map: dict[int, dict[str, Any]] = {}
 
-                for chunk in stream:
-                    delta = chunk.choices[0].delta
+                try:
+                    async for chunk in stream:
+                        delta = chunk.choices[0].delta
 
-                    if delta.content:
-                        buffered_tokens.append(delta.content)
-                        if not tool_calls_map:
-                            yield delta.content, []
+                        if delta.content:
+                            buffered_tokens.append(delta.content)
+                            if not tool_calls_map:
+                                yield delta.content, []
 
-                    if delta.tool_calls:
-                        for tc_delta in delta.tool_calls:
-                            entry = tool_calls_map.setdefault(
-                                tc_delta.index,
-                                {"id": "", "name": "", "arguments": ""},
-                            )
-                            if tc_delta.id:
-                                entry["id"] = tc_delta.id
-                            if tc_delta.function and tc_delta.function.name:
-                                entry["name"] = tc_delta.function.name
-                            if tc_delta.function and tc_delta.function.arguments:
-                                entry["arguments"] = (
-                                    entry["arguments"] or ""
-                                ) + tc_delta.function.arguments
+                        if delta.tool_calls:
+                            for tc_delta in delta.tool_calls:
+                                entry = tool_calls_map.setdefault(
+                                    tc_delta.index,
+                                    {"id": "", "name": "", "arguments": ""},
+                                )
+                                if tc_delta.id:
+                                    entry["id"] = tc_delta.id
+                                if tc_delta.function and tc_delta.function.name:
+                                    entry["name"] = tc_delta.function.name
+                                if tc_delta.function and tc_delta.function.arguments:
+                                    entry["arguments"] = (
+                                        entry["arguments"] or ""
+                                    ) + tc_delta.function.arguments
+                except asyncio.CancelledError:
+                    logger.info("DeepSeek 上游模型流已取消，主动关闭 stream。")
+                    await _close_stream_safely(stream)
+                    raise
+                finally:
+                    await _close_stream_safely(stream)
 
                 tool_calls_to_process = [
                     tool_calls_map[index]
                     for index in sorted(tool_calls_map)
                 ]
+                log_llm_response(
+                    logger,
+                    provider="DeepseekMcpProvider",
+                    stage=f"chat.stream.round_{round_index + 1}",
+                    model=self.settings.deepseek_model,
+                    stream=True,
+                    request_started_at=request_started_at,
+                    response={
+                        "content": "".join(buffered_tokens),
+                        "tool_calls": tool_calls_to_process,
+                    },
+                )
 
                 messages.append({
                     "role": "assistant",
@@ -592,3 +724,25 @@ class DeepseekMcpProvider(BaseLLmProvider):
                 input_summary=f"流异常: {str(exc)[:200]}",
             ))
             yield "抱歉，服务处理时遇到了问题，请稍后再试。", list(self._mcp_calls)
+
+
+async def _close_stream_safely(stream: Any) -> None:
+    """目的：执行 _close_stream_safely 对应的模块级处理逻辑。
+    结果：返回或落地稳定结果，供调用方继续使用。
+    """
+    if stream is None:
+        return
+    close = getattr(stream, "aclose", None)
+    if callable(close):
+        try:
+            await close()
+        except Exception:
+            return
+    close = getattr(stream, "close", None)
+    if callable(close):
+        try:
+            result = close()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception:
+            return

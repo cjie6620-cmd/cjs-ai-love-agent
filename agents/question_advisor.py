@@ -28,25 +28,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from contracts.chat import ChatMode, ConversationHistoryMessage, QuestionAdvisorPayload
+from contracts.chat import ChatMode, ConversationContext, ConversationHistoryMessage, QuestionAdvisorPayload
 
 
 @dataclass(slots=True)
 class QuestionAdvisorDraft:
-    """顾问草稿，先用于检索，再在回复后补全建议问题。
-
-    目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
+    """目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
     结果：相关模块可以围绕该对象稳定协作，提升代码可读性和可维护性。
     """
 
+    # 目的：保存 issue_summary 字段，用于 QuestionAdvisorDraft 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 issue_summary 值。
     issue_summary: str
+    # 目的：保存 retrieval_query 字段，用于 QuestionAdvisorDraft 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 retrieval_query 值。
     retrieval_query: str
 
 
 class QuestionAdvisor:
-    """基于规则的轻量问题顾问，不额外引入一次模型调用。
-    
-    目的：封装基于规则的轻量问题顾问，不额外引入一次模型调用相关能力。
+    """目的：封装基于规则的轻量问题顾问，不额外引入一次模型调用相关能力。
     结果：对外提供稳定、可复用的调用入口。
     """
 
@@ -55,23 +55,29 @@ class QuestionAdvisor:
         *,
         message: str,
         mode: ChatMode,
-        recent_messages: list[ConversationHistoryMessage] | None = None,
+        conversation_context: ConversationContext | None = None,
     ) -> QuestionAdvisorDraft:
-        """构建问题顾问草稿。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         normalized_message = self._normalize_text(message)
-        recent_user_messages = self._collect_recent_user_messages(recent_messages or [])
+        recent_messages = conversation_context.recent_messages if conversation_context else []
+        summary_text = (
+            conversation_context.session_summary.summary_text
+            if conversation_context and conversation_context.session_summary
+            else ""
+        )
+        recent_user_messages = self._collect_recent_user_messages(recent_messages)
 
         issue_summary = self._build_issue_summary(
             current_message=normalized_message,
+            session_summary=summary_text,
             recent_user_messages=recent_user_messages,
         )
         retrieval_query = self._build_retrieval_query(
             current_message=normalized_message,
             mode=mode,
+            session_summary=summary_text,
             recent_user_messages=recent_user_messages,
         )
         return QuestionAdvisorDraft(
@@ -87,9 +93,7 @@ class QuestionAdvisor:
         matched_topics: list[str],
         reply: str,
     ) -> QuestionAdvisorPayload:
-        """完成问题顾问数据构建。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         topics = self._deduplicate_strings(matched_topics)[:3]
@@ -108,9 +112,7 @@ class QuestionAdvisor:
         )
 
     def extract_matched_topics(self, raw_topics: list[str]) -> list[str]:
-        """提取检索命中的主题，优先保留可读标题。
-
-        目的：按指定条件读取目标数据、资源或结果集合。
+        """目的：按指定条件读取目标数据、资源或结果集合。
         结果：返回可直接消费的查询结果，减少调用方重复处理。
         """
         topics = []
@@ -126,17 +128,21 @@ class QuestionAdvisor:
         self,
         *,
         current_message: str,
+        session_summary: str,
         recent_user_messages: list[str],
     ) -> str:
-        """构建问题摘要。
-
-        目的：统一处理输入值的边界情况、格式约束和清洗规则。
+        """目的：统一处理输入值的边界情况、格式约束和清洗规则。
         结果：返回满足约束的结果，避免脏数据影响后续逻辑。
         """
-        if not recent_user_messages:
+        normalized_summary = self._normalize_text(session_summary)
+        if not recent_user_messages and not normalized_summary:
             return current_message
 
-        recent_context = "，".join(recent_user_messages[-2:])
+        recent_context_parts = []
+        if normalized_summary:
+            recent_context_parts.append(f"会话背景：{normalized_summary}")
+        recent_context_parts.extend(recent_user_messages[-3:])
+        recent_context = "，".join(recent_context_parts)
         if current_message in recent_context:
             return recent_context
         return f"{recent_context}，当前最想解决的是：{current_message}"
@@ -146,14 +152,16 @@ class QuestionAdvisor:
         *,
         current_message: str,
         mode: ChatMode,
+        session_summary: str,
         recent_user_messages: list[str],
     ) -> str:
-        """构建检索查询。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
-        snippets = self._deduplicate_strings([*recent_user_messages[-2:], current_message])
+        summary_snippet = self._normalize_text(session_summary)
+        snippets = self._deduplicate_strings(
+            [summary_snippet, *recent_user_messages[-3:], current_message]
+        )
         mode_hint = {
             "companion": "情感陪伴",
             "advice": "恋爱建议",
@@ -175,9 +183,7 @@ class QuestionAdvisor:
         matched_topics: list[str],
         reply: str,
     ) -> list[str]:
-        """构建建议问题列表。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         context_text = " ".join([issue_summary, retrieval_query, *matched_topics, reply]).strip()
@@ -199,9 +205,7 @@ class QuestionAdvisor:
         self,
         recent_messages: list[ConversationHistoryMessage],
     ) -> list[str]:
-        """收集最近的用户消息。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         user_messages = [
@@ -212,9 +216,7 @@ class QuestionAdvisor:
         return self._deduplicate_strings(user_messages)[-3:]
 
     def _detect_scenario_hint(self, text: str) -> str:
-        """检测场景提示。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         scenario_map = {
@@ -229,7 +231,9 @@ class QuestionAdvisor:
         return scenario_map.get(scenario_key, "")
 
     def _detect_followup_intent(self, text: str) -> str:
-        """识别用户下一步最可能会追问的意图类型。"""
+        """目的：根据关键词把当前问题归类为流程、条件、费用、排障等追问方向。
+        结果：返回用于生成建议问题的 intent 字符串。
+        """
         normalized = self._normalize_text(text)
         checks = [
             ("study", ["备考", "复习", "资料", "题型", "考试", "刷题", "学习计划", "怎么考"]),
@@ -253,7 +257,9 @@ class QuestionAdvisor:
         retrieval_query: str,
         matched_topics: list[str],
     ) -> str:
-        """按固定优先级提取下一问主题。"""
+        """目的：优先使用命中主题，其次使用检索 query，最后回退到问题摘要。
+        结果：返回适合放入建议问题模板的短主题。
+        """
         if matched_topics:
             return self._normalize_topic(matched_topics[-1])
 
@@ -263,7 +269,9 @@ class QuestionAdvisor:
         return self._normalize_topic(issue_summary)
 
     def _extract_topic_from_retrieval_query(self, retrieval_query: str) -> str:
-        """从检索 query 中抽取更适合展示的核心主题。"""
+        """目的：去除检索 query 中的用户情况、前缀和长串描述。
+        结果：返回更短、更适合展示在推荐问题里的主题。
+        """
         normalized = self._normalize_text(retrieval_query)
         if not normalized:
             return ""
@@ -276,7 +284,9 @@ class QuestionAdvisor:
         return self._normalize_topic(normalized)
 
     def _normalize_topic(self, topic: str) -> str:
-        """清洗主题文本，避免把系统提示或长串拼接直接展示给用户。"""
+        """目的：移除系统提示、检索痕迹和过长描述，避免推荐问题显得机械。
+        结果：返回短而自然的主题文本。
+        """
         normalized = self._normalize_text(topic)
         if not normalized:
             return ""
@@ -301,7 +311,9 @@ class QuestionAdvisor:
         topic: str,
         mode: ChatMode,
     ) -> list[str]:
-        """基于意图和主题生成候选下一问。"""
+        """目的：把追问意图和主题套入可直接发送的问题模板。
+        结果：返回一组候选建议问题。
+        """
         subject = topic or "这件事"
         templates = {
             "process": [
@@ -360,7 +372,9 @@ class QuestionAdvisor:
         *,
         current_message: str,
     ) -> list[str]:
-        """清洗、去重并过滤与当前问题过近的建议问题。"""
+        """目的：去除重复、系统味文案和与当前消息完全相同的问题。
+        结果：返回最多可展示的自然追问列表，并在不足时补默认问题。
+        """
         result: list[str] = []
         seen: set[str] = set()
         current_normalized = self._normalize_compare_text(current_message)
@@ -399,14 +413,14 @@ class QuestionAdvisor:
         return result
 
     def _normalize_compare_text(self, text: str) -> str:
-        """标准化比较文本，用于去重和相似判断。"""
+        """目的：去除问号和空白，降低建议问题去重时的格式干扰。
+        结果：返回用于相等比较的紧凑字符串。
+        """
         normalized = self._normalize_text(text).replace("？", "").replace("?", "")
         return re.sub(r"\s+", "", normalized)
 
     def _detect_scenario_key(self, text: str) -> str:
-        """检测场景关键词。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         lowered = text.lower()
@@ -426,9 +440,7 @@ class QuestionAdvisor:
         return ""
 
     def _deduplicate_strings(self, values: list[str]) -> list[str]:
-        """去重字符串列表。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         seen: set[str] = set()
@@ -442,9 +454,7 @@ class QuestionAdvisor:
         return result
 
     def _normalize_text(self, text: str) -> str:
-        """标准化文本。
-
-        目的：统一处理输入值的边界情况、格式约束和清洗规则。
+        """目的：统一处理输入值的边界情况、格式约束和清洗规则。
         结果：返回满足约束的结果，避免脏数据影响后续逻辑。
         """
         return " ".join(text.strip().split())

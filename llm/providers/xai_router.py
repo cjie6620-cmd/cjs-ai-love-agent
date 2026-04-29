@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import asyncio
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -18,6 +19,8 @@ from llm.core.types import LlmMessage, McpCallInfo
 from llm.providers.base import (
     _MAX_FUNCTION_CALL_ROUNDS,
     BaseLLmProvider,
+    log_llm_request,
+    log_llm_response,
 )
 from observability import get_langsmith_service
 
@@ -30,16 +33,12 @@ logger = logging.getLogger(__name__)
 
 
 class XaiRouterProvider(BaseLLmProvider):
-    """XAI Router 提供者：使用 OpenAI Chat Completions API，通过手动函数调用循环支持 MCP 工具。
-    
-    目的：封装XAI Router 提供者：使用 OpenAI Chat Completions API，通过手动函数调用循环支持 MCP 工具相关的模型或能力实现。
+    """目的：封装XAI Router 提供者：使用 OpenAI Chat Completions API，通过手动函数调用循环支持 MCP 工具相关的模型或能力实现。
     结果：上层可按统一 Provider 接口发起调用。
     """
 
     def __init__(self, settings: Any) -> None:
-        """初始化 XaiRouterProvider。
-        
-        目的：初始化XaiRouterProvider所需的依赖、配置和初始状态。
+        """目的：初始化XaiRouterProvider所需的依赖、配置和初始状态。
         结果：实例创建完成后可直接参与后续业务流程。
         """
         super().__init__(settings)
@@ -82,15 +81,15 @@ class XaiRouterProvider(BaseLLmProvider):
         self._tools_loaded = False
 
     def _get_model_name(self) -> str:
-        """返回当前 Provider 的模型名，供 tokenizer 路由使用。
-
-        目的：按指定条件读取目标数据、资源或结果集合。
+        """目的：按指定条件读取目标数据、资源或结果集合。
         结果：返回可直接消费的查询结果，减少调用方重复处理。
         """
         return self.settings.llm_model
 
     def _get_structured_client_options(self) -> dict[str, Any]:
-        """返回工具终结阶段使用的 ChatOpenAI 配置。"""
+        """目的：为工具终结阶段提供 XAI Router 兼容 OpenAI 的模型配置。
+        结果：返回模型名、API Key 和 base_url。
+        """
         return {
             "model": self.settings.llm_model,
             "api_key": self.settings.xai_api_key,
@@ -98,9 +97,7 @@ class XaiRouterProvider(BaseLLmProvider):
         }
 
     async def _ensure_tools_loaded(self) -> None:
-        """确保 MCP 工具列表已加载（在 running event loop 中惰性加载一次）。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         if self._tools_loaded or self._mcp_client is None:
@@ -112,9 +109,7 @@ class XaiRouterProvider(BaseLLmProvider):
             logger.warning("MCP 工具加载失败: %s", exc)
 
     def _build_system_prompt(self, base_system_prompt: str) -> str:
-        """构建系统提示词，告知模型可用的工具及调用原则。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         return base_system_prompt + self._tool_registry.build_system_prompt_tools_section()
@@ -124,9 +119,7 @@ class XaiRouterProvider(BaseLLmProvider):
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        """执行单个工具调用，优先走 MCP，否则走直接 API。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         registry = getattr(self, "_tool_registry", None)
@@ -151,9 +144,7 @@ class XaiRouterProvider(BaseLLmProvider):
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        """异步执行单个工具调用（供 generate_stream 使用）。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         registry = getattr(self, "_tool_registry", None)
@@ -173,7 +164,9 @@ class XaiRouterProvider(BaseLLmProvider):
 
     @staticmethod
     def _normalize_tool_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
-        """限制工具入参形态和大小，避免异常参数进入外部服务。"""
+        """目的：限制工具入参类型、字段数量和字符串长度，避免异常参数进入外部服务。
+        结果：返回可安全传递给工具客户端的参数字典。
+        """
         if not isinstance(arguments, dict):
             return {}
 
@@ -198,9 +191,7 @@ class XaiRouterProvider(BaseLLmProvider):
         arguments: dict[str, Any],
         server_label: str,
     ) -> dict[str, Any]:
-        """通过统一基类接口执行同步工具调用并记录追踪。
-
-        目的：持久化、上传或补充目标数据，保持状态同步。
+        """目的：持久化、上传或补充目标数据，保持状态同步。
         结果：相关数据被成功写入或更新，便于后续流程继续使用。
         """
         import asyncio
@@ -221,9 +212,7 @@ class XaiRouterProvider(BaseLLmProvider):
         arguments: dict[str, Any],
         server_label: str,
     ) -> dict[str, Any]:
-        """通过统一基类接口执行异步工具调用并记录追踪。
-
-        目的：持久化、上传或补充目标数据，保持状态同步。
+        """目的：持久化、上传或补充目标数据，保持状态同步。
         结果：相关数据被成功写入或更新，便于后续流程继续使用。
         """
         return await client.call_with_tracking(
@@ -238,9 +227,7 @@ class XaiRouterProvider(BaseLLmProvider):
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        """执行 Tavily 搜索调用（同步版本）。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         return self._run_tool_call_sync(
@@ -255,9 +242,7 @@ class XaiRouterProvider(BaseLLmProvider):
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        """执行 Tavily 搜索调用（异步版本）。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         return await self._run_tool_call_async(
@@ -272,9 +257,7 @@ class XaiRouterProvider(BaseLLmProvider):
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        """执行 MCP 调用（同步版本）。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         return self._run_tool_call_sync(
@@ -289,9 +272,7 @@ class XaiRouterProvider(BaseLLmProvider):
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        """执行 MCP 调用（异步版本）。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         return await self._run_tool_call_async(
@@ -302,9 +283,7 @@ class XaiRouterProvider(BaseLLmProvider):
         )
 
     def _detect_mcp_server_label(self, tool_name: str) -> str:
-        """根据工具名称识别 MCP 服务器标签。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         if any(k in tool_name for k in ["weather", "temp", "temperature"]):
@@ -327,9 +306,7 @@ class XaiRouterProvider(BaseLLmProvider):
         input_summary: str,
         error_message: str | None = None,
     ) -> None:
-        """记录 MCP 调用信息到追踪列表。
-
-        目的：持久化、上传或补充目标数据，保持状态同步。
+        """目的：持久化、上传或补充目标数据，保持状态同步。
         结果：相关数据被成功写入或更新，便于后续流程继续使用。
         """
         self._mcp_calls.append(McpCallInfo(
@@ -346,9 +323,7 @@ class XaiRouterProvider(BaseLLmProvider):
         tool_name: str,
         result: dict[str, Any],
     ) -> str:
-        """将工具执行结果格式化为文本，注入到模型上下文中。
-
-        目的：按约定协议整理输出内容，统一格式细节。
+        """目的：按约定协议整理输出内容，统一格式细节。
         结果：返回格式一致的结果，降低上下游对接成本。
         """
         if "error" in result:
@@ -390,9 +365,7 @@ class XaiRouterProvider(BaseLLmProvider):
         *,
         history: list[LlmMessage] | None = None,
     ) -> tuple[str, list[McpCallInfo]]:
-        """非流式生成（内部使用流式模式）：Chat Completions API + 手动函数调用循环。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         if not self.settings.xai_api_key:
@@ -409,7 +382,7 @@ class XaiRouterProvider(BaseLLmProvider):
         used_tools = False
 
         try:
-            for _ in range(_MAX_FUNCTION_CALL_ROUNDS):
+            for round_index in range(_MAX_FUNCTION_CALL_ROUNDS):
                 # 发送 Chat Completions 请求（内部使用流式模式以规避空 content bug）
                 request_kwargs: dict[str, Any] = {
                     "model": self.settings.llm_model,
@@ -420,6 +393,14 @@ class XaiRouterProvider(BaseLLmProvider):
                     request_kwargs["tools"] = functions
                     request_kwargs["tool_choice"] = "auto"
 
+                request_started_at = log_llm_request(
+                    logger,
+                    provider="XaiRouterProvider",
+                    stage=f"chat.generate.round_{round_index + 1}",
+                    model=self.settings.llm_model,
+                    stream=True,
+                    request=request_kwargs,
+                )
                 stream = await self._async_client.chat.completions.create(**request_kwargs)
 
                 # 聚合计数器
@@ -451,11 +432,17 @@ class XaiRouterProvider(BaseLLmProvider):
                                     tool_calls_batch[idx]["function"]["arguments"] or ""
                                 ) + tc.function.arguments
 
-                # 调试日志：记录聚合计数后的内容
-                logger.info(
-                    "[XaiRouter generate] API 响应: content长度=%d, tool_calls=%s",
-                    len(assistant_content),
-                    [tc["function"]["name"] for tc in tool_calls_batch],
+                log_llm_response(
+                    logger,
+                    provider="XaiRouterProvider",
+                    stage=f"chat.generate.round_{round_index + 1}",
+                    model=self.settings.llm_model,
+                    stream=True,
+                    request_started_at=request_started_at,
+                    response={
+                        "content": assistant_content,
+                        "tool_calls": tool_calls_batch,
+                    },
                 )
 
                 # 将模型回复追加到 messages
@@ -534,9 +521,7 @@ class XaiRouterProvider(BaseLLmProvider):
         *,
         history: list[LlmMessage] | None = None,
     ) -> AsyncIterator[tuple[str, list[McpCallInfo]]]:
-        """流式生成：Chat Completions API + 手动函数调用循环。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         if not self.settings.xai_api_key:
@@ -551,8 +536,9 @@ class XaiRouterProvider(BaseLLmProvider):
         start_time = time.monotonic()
         used_tools = False
 
+        stream = None
         try:
-            for _ in range(_MAX_FUNCTION_CALL_ROUNDS):
+            for round_index in range(_MAX_FUNCTION_CALL_ROUNDS):
                 request_kwargs: dict[str, Any] = {
                     "model": self.settings.llm_model,
                     "messages": messages,
@@ -562,31 +548,59 @@ class XaiRouterProvider(BaseLLmProvider):
                     request_kwargs["tools"] = functions
                     request_kwargs["tool_choice"] = "auto"
 
+                request_started_at = log_llm_request(
+                    logger,
+                    provider="XaiRouterProvider",
+                    stage=f"chat.stream.round_{round_index + 1}",
+                    model=self.settings.llm_model,
+                    stream=True,
+                    request=request_kwargs,
+                )
                 stream = await self._async_client.chat.completions.create(**request_kwargs)
 
                 assistant_content = ""
                 tool_calls_batch: list[Any] = []
                 saw_tool_calls = False
-                async for chunk in stream:
-                    delta = chunk.choices[0].delta
-                    if delta.content:
-                        assistant_content += delta.content
-                        if not saw_tool_calls:
-                            yield delta.content, []
-                    if delta.tool_calls:
-                        saw_tool_calls = True
-                        for tc in delta.tool_calls:
-                            idx = tc.index
-                            while len(tool_calls_batch) <= idx:
-                                tool_calls_batch.append({"id": "", "function": {"name": "", "arguments": ""}})
-                            if tc.id:
-                                tool_calls_batch[idx]["id"] = tc.id
-                            if tc.function and tc.function.name:
-                                tool_calls_batch[idx]["function"]["name"] = tc.function.name
-                            if tc.function and tc.function.arguments:
-                                tool_calls_batch[idx]["function"]["arguments"] = (
-                                    tool_calls_batch[idx]["function"]["arguments"] or ""
-                                ) + tc.function.arguments
+                try:
+                    async for chunk in stream:
+                        delta = chunk.choices[0].delta
+                        if delta.content:
+                            assistant_content += delta.content
+                            if not saw_tool_calls:
+                                yield delta.content, []
+                        if delta.tool_calls:
+                            saw_tool_calls = True
+                            for tc in delta.tool_calls:
+                                idx = tc.index
+                                while len(tool_calls_batch) <= idx:
+                                    tool_calls_batch.append({"id": "", "function": {"name": "", "arguments": ""}})
+                                if tc.id:
+                                    tool_calls_batch[idx]["id"] = tc.id
+                                if tc.function and tc.function.name:
+                                    tool_calls_batch[idx]["function"]["name"] = tc.function.name
+                                if tc.function and tc.function.arguments:
+                                    tool_calls_batch[idx]["function"]["arguments"] = (
+                                        tool_calls_batch[idx]["function"]["arguments"] or ""
+                                    ) + tc.function.arguments
+                except asyncio.CancelledError:
+                    logger.info("XaiRouter 上游模型流已取消，主动关闭 stream。")
+                    await _close_stream_safely(stream)
+                    raise
+                finally:
+                    await _close_stream_safely(stream)
+
+                log_llm_response(
+                    logger,
+                    provider="XaiRouterProvider",
+                    stage=f"chat.stream.round_{round_index + 1}",
+                    model=self.settings.llm_model,
+                    stream=True,
+                    request_started_at=request_started_at,
+                    response={
+                        "content": assistant_content,
+                        "tool_calls": tool_calls_batch,
+                    },
+                )
 
                 # 追加 assistant 消息
                 messages.append({
@@ -656,3 +670,25 @@ class XaiRouterProvider(BaseLLmProvider):
                 await self._mcp_client.close()
             if self._tavily_client:
                 await self._tavily_client.close()
+
+
+async def _close_stream_safely(stream: Any) -> None:
+    """目的：执行 _close_stream_safely 对应的模块级处理逻辑。
+    结果：返回或落地稳定结果，供调用方继续使用。
+    """
+    if stream is None:
+        return
+    close = getattr(stream, "aclose", None)
+    if callable(close):
+        try:
+            await close()
+        except Exception:
+            return
+    close = getattr(stream, "close", None)
+    if callable(close):
+        try:
+            result = close()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception:
+            return

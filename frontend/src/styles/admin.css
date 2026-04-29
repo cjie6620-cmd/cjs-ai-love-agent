@@ -1,0 +1,167 @@
+.admin-page {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.admin-card {
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(20, 26, 33, 0.05);
+}
+
+.admin-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e4e9ee;
+}
+
+.admin-card-header h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.admin-card-body {
+  padding: 16px;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  padding: 16px;
+  border: 1px solid #dfe5eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.metric-card span {
+  color: #647382;
+  font-size: 12px;
+}
+
+.metric-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 28px;
+}
+
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-input,
+.admin-select,
+.admin-textarea {
+  min-height: 36px;
+  border: 1px solid #cfd7df;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+  color: #17202a;
+}
+
+.admin-textarea {
+  width: 100%;
+  min-height: 130px;
+  resize: vertical;
+}
+
+.admin-button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #17202a;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.admin-button.secondary {
+  border: 1px solid #cfd7df;
+  background: #ffffff;
+  color: #17202a;
+}
+
+.admin-button.danger {
+  background: #b83b3b;
+}
+
+.admin-table-wrap {
+  overflow: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #e7ecf1;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-table th {
+  color: #58697a;
+  font-weight: 700;
+  background: #f6f8fa;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #edf1f5;
+  color: #536273;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-pill.active,
+.status-pill.succeeded {
+  background: #e5f5e9;
+  color: #237044;
+}
+
+.status-pill.failed,
+.status-pill.disabled {
+  background: #fae7e7;
+  color: #a73636;
+}
+
+.status-pill.running,
+.status-pill.indexing,
+.status-pill.pending {
+  background: #fff1d8;
+  color: #96600f;
+}
+
+.json-cell,
+.text-cell {
+  max-width: 420px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

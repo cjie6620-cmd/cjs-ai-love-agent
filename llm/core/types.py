@@ -27,23 +27,33 @@ LlmMessage = dict[str, Any]
 
 @dataclass
 class McpCallInfo:
-    """MCP 工具调用追踪信息。
-    
-    目的：描述MCP 工具调用追踪信息的数据结构和字段约束。
+    """目的：描述MCP 工具调用追踪信息的数据结构和字段约束。
     结果：对象在校验、序列化和模块传输时保持一致。
     """
+    # 目的：保存 server_label 字段，用于 McpCallInfo 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 server_label 值。
     server_label: str
+    # 目的：保存 tool_name 字段，用于 McpCallInfo 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 tool_name 值。
     tool_name: str
+    # 目的：保存 status 字段，用于 McpCallInfo 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 status 值。
     status: str
+    # 目的：保存 duration_ms 字段，用于 McpCallInfo 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 duration_ms 值。
     duration_ms: int
+    # 目的：保存 input_summary 字段，用于 McpCallInfo 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 input_summary 值。
     input_summary: str = ""
+    # 目的：保存 output_summary 字段，用于 McpCallInfo 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 output_summary 值。
     output_summary: str = ""
+    # 目的：保存 error_message 字段，用于 McpCallInfo 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 error_message 值。
     error_message: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        """转换为字典格式。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         return {
@@ -71,21 +81,25 @@ ToolResult = dict[str, Any]
 
 @dataclass
 class LlmConfig:
-    """LLM 配置信息。
-
-    目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
+    """目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
     结果：相关模块可以围绕该对象稳定协作，提升代码可读性和可维护性。
     """
+    # 目的：保存 provider_name 字段，用于 LlmConfig 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 provider_name 值。
     provider_name: str
+    # 目的：保存 model 字段，用于 LlmConfig 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 model 值。
     model: str
+    # 目的：保存 base_url 字段，用于 LlmConfig 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 base_url 值。
     base_url: str
+    # 目的：保存 api_key 字段，用于 LlmConfig 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 api_key 值。
     api_key: str = ""
 
     @property
     def api_key_masked(self) -> str:
-        """返回脱敏的 API Key。
-
-        目的：按需获取并返回目标配置或资源，避免重复构建。
+        """目的：按需获取并返回目标配置或资源，避免重复构建。
         结果：调用方可以拿到可直接使用的结果，简化后续处理。
         """
         if not self.api_key or len(self.api_key) < 8:

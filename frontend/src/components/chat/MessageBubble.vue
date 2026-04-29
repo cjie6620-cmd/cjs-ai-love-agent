@@ -18,13 +18,28 @@
         :status="message.streamState?.thinkingStatus ?? 'idle'"
       />
 
-      <div :class="['message-block', message.role === 'user' ? 'block-user' : 'block-assistant']">
+      <div
+        :class="[
+          'message-block',
+          message.role === 'user' ? 'block-user' : 'block-assistant',
+          { 'is-streaming-reply': message.role === 'assistant' && message.streamState?.replyStatus === 'streaming' },
+        ]"
+      >
         <p v-if="message.role === 'assistant'" class="message-name">AI Love</p>
         <div v-if="message.content" class="message-text">{{ message.content }}</div>
+        <div v-else-if="message.streamState?.replyStatus === 'cancelled'" class="cancelled-line">
+          已停止
+        </div>
         <div v-else class="typing-line">
           <span />
           <span />
           <span />
+        </div>
+        <div
+          v-if="message.content && message.streamState?.replyStatus === 'cancelled'"
+          class="cancelled-meta"
+        >
+          已停止
         </div>
 
         <div v-if="showAdvisor" class="advisor-panel">
@@ -111,8 +126,8 @@ defineEmits<{
 .message-stack {
   display: grid;
   justify-items: start;
-  gap: 10px;
-  max-width: min(78%, 740px);
+  gap: 12px;
+  max-width: min(84%, 780px);
 }
 
 .is-user .message-stack {
@@ -130,7 +145,9 @@ defineEmits<{
 
 .block-assistant {
   border-top-left-radius: 8px;
-  background: rgba(255, 255, 255, 0.76);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.86), rgba(255, 250, 247, 0.78)),
+    radial-gradient(circle at 12% 0%, rgba(130, 163, 255, 0.08), transparent 32%);
   color: var(--chat-text-primary);
 }
 
@@ -151,10 +168,24 @@ defineEmits<{
 }
 
 .message-text {
+  position: relative;
   font-size: 15px;
   line-height: 1.88;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.is-streaming-reply .message-text::after {
+  display: inline-block;
+  width: 7px;
+  height: 1.14em;
+  margin-left: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--chat-accent), var(--chat-warm));
+  vertical-align: -0.18em;
+  box-shadow: 0 0 14px rgba(200, 95, 120, 0.28);
+  animation: replyCaret 0.86s steps(2, jump-none) infinite;
+  content: "";
 }
 
 .typing-line {
@@ -179,6 +210,17 @@ defineEmits<{
 
 .typing-line span:nth-child(3) {
   animation-delay: 0.3s;
+}
+
+.cancelled-line,
+.cancelled-meta {
+  color: var(--chat-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cancelled-meta {
+  margin-top: 10px;
 }
 
 .advisor-panel {
@@ -239,6 +281,25 @@ defineEmits<{
   50% {
     opacity: 0.9;
     transform: translateY(-4px);
+  }
+}
+
+@keyframes replyCaret {
+  0%,
+  44% {
+    opacity: 1;
+  }
+
+  45%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-streaming-reply .message-text::after,
+  .typing-line span {
+    animation: none;
   }
 }
 

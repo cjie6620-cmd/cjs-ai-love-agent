@@ -16,9 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class ToolRegistry:
-    """工具注册表：管理 MCP 工具和 Tavily 工具的函数定义。
-    
-    目的：封装工具注册表：管理 MCP 工具和 Tavily 工具的函数定义相关能力。
+    """目的：封装工具注册表：管理 MCP 工具和 Tavily 工具的函数定义相关能力。
     结果：对外提供稳定、可复用的调用入口。
     """
 
@@ -29,9 +27,7 @@ class ToolRegistry:
         *,
         mcp_server_name: str = "高德地图",
     ) -> None:
-        """初始化工具注册表。
-
-        目的：接收并保存运行所需的依赖、配置和初始状态。
+        """目的：接收并保存运行所需的依赖、配置和初始状态。
         结果：实例初始化完成，可直接执行后续业务调用。
         """
         self._mcp_client = mcp_client
@@ -40,9 +36,7 @@ class ToolRegistry:
         self._mcp_tools: list[dict[str, Any]] = []
 
     def convert_mcp_to_function(self, tool: dict[str, Any]) -> dict[str, Any]:
-        """将 MCP 工具 schema 转换为 OpenAI function 定义格式。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         name = tool.get("name", "unknown")
@@ -69,9 +63,7 @@ class ToolRegistry:
         }
 
     def get_tavily_function(self) -> dict[str, Any]:
-        """获取 Tavily 网络搜索的 function 定义。
-
-        目的：按指定条件读取目标数据、资源或结果集合。
+        """目的：按指定条件读取目标数据、资源或结果集合。
         结果：返回可直接消费的查询结果，减少调用方重复处理。
         """
         return {
@@ -101,9 +93,7 @@ class ToolRegistry:
         }
 
     def get_all_functions(self) -> list[dict[str, Any]]:
-        """获取所有可用的函数定义。
-
-        目的：按指定条件读取目标数据、资源或结果集合。
+        """目的：按指定条件读取目标数据、资源或结果集合。
         结果：返回可直接消费的查询结果，减少调用方重复处理。
         """
         functions: list[dict[str, Any]] = []
@@ -119,7 +109,9 @@ class ToolRegistry:
         return functions
 
     def is_allowed_tool(self, tool_name: str) -> bool:
-        """判断模型请求的工具是否在注册表中，避免执行未注册工具。"""
+        """目的：避免模型幻觉出的未注册工具被执行。
+        结果：返回 True 表示该工具名存在于当前可用函数列表。
+        """
         return tool_name in {
             function["function"]["name"]
             for function in self.get_all_functions()
@@ -127,9 +119,7 @@ class ToolRegistry:
         }
 
     def build_system_prompt_tools_section(self) -> str:
-        """构建系统提示词中的工具说明部分。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         has_tools = bool(self._mcp_tools or self._tavily_client)
@@ -164,9 +154,7 @@ class ToolRegistry:
         return tools_section
 
     async def load_mcp_tools(self) -> bool:
-        """从 MCP 服务器加载工具列表。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         if not self._mcp_client:
@@ -185,18 +173,14 @@ class ToolRegistry:
 
     @property
     def has_tools(self) -> bool:
-        """检查是否有可用的工具。
-
-        目的：按需获取并返回目标配置或资源，避免重复构建。
+        """目的：按需获取并返回目标配置或资源，避免重复构建。
         结果：调用方可以拿到可直接使用的结果，简化后续处理。
         """
         return bool(self._mcp_tools or self._tavily_client)
 
     @property
     def mcp_tool_count(self) -> int:
-        """获取 MCP 工具数量。
-
-        目的：按需获取并返回目标配置或资源，避免重复构建。
+        """目的：按需获取并返回目标配置或资源，避免重复构建。
         结果：调用方可以拿到可直接使用的结果，简化后续处理。
         """
         return len(self._mcp_tools)

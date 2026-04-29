@@ -5,8 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from contracts.chat import ChatReplyModel, MemoryDecision
+from contracts.chat import ChatReplyModel, MemoryDecisionBatch
 from llm.providers.base import BaseLLmProvider
+from llm.providers.openai_remote import DeepseekMcpProvider
 from prompt import PromptSection, PromptSpec
 
 
@@ -73,6 +74,24 @@ class _FakeStructuredChatModel:
         return _FakeStructuredRunnable(self._payload, self._captured)
 
 
+class _FakeDeepseekCompletions:
+    """模拟 DeepSeek 原生 Chat Completions。"""
+
+    def __init__(self, content: str, captured: dict[str, object]) -> None:
+        self._content = content
+        self._captured = captured
+
+    async def create(self, **kwargs: object) -> object:
+        self._captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=self._content),
+                )
+            ]
+        )
+
+
 def _build_prompt_spec(name: str, output_schema_name: str) -> PromptSpec:
     return PromptSpec(
         name=name,
@@ -90,14 +109,18 @@ async def test_decide_memory_uses_dedicated_structured_output(monkeypatch) -> No
     provider = _DummyProvider()
     captured: dict[str, object] = {}
     payload = {
-        "should_store": True,
-        "memory_type": "profile_summary",
-        "memory_text": "用户冲突时容易先沉默。",
-        "canonical_key": "profile:conflict_style",
-        "importance_score": 0.88,
-        "confidence": 0.88,
-        "merge_strategy": "append",
-        "reason_code": "stable_profile",
+        "items": [
+            {
+                "should_store": True,
+                "memory_type": "profile_summary",
+                "memory_text": "用户冲突时容易先沉默。",
+                "canonical_key": "profile:conflict_style",
+                "importance_score": 0.88,
+                "confidence": 0.88,
+                "merge_strategy": "append",
+                "reason_code": "stable_profile",
+            }
+        ],
     }
     monkeypatch.setattr(
         provider,
@@ -109,9 +132,9 @@ async def test_decide_memory_uses_dedicated_structured_output(monkeypatch) -> No
         _build_prompt_spec("memory.extraction", "MemoryExtractionResult")
     )
 
-    assert isinstance(result, MemoryDecision)
-    assert result.should_store is True
-    assert captured["schema"] is MemoryDecision
+    assert isinstance(result, MemoryDecisionBatch)
+    assert result.items[0].should_store is True
+    assert captured["schema"] is MemoryDecisionBatch
     assert captured["messages"]
 
 
@@ -155,3 +178,41 @@ async def test_finalize_chat_reply_uses_pending_tool_history(monkeypatch) -> Non
     rendered_messages = captured["messages"]
     assert rendered_messages
     assert any("工具结果" in str(getattr(message, "content", "")) for message in rendered_messages)
+
+
+@pytest.mark.asyncio
+async def test_deepseek_structured_output_uses_plain_json_chat_completion() -> None:
+    """DeepSeek 结构化输出不依赖 response_format，直接解析模型 JSON。"""
+    settings = SimpleNamespace(
+        deepseek_api_key="test-key",
+        deepseek_base_url="https://example.com/v1",
+        deepseek_model="deepseek-chat",
+        mcp_tavily_enabled=False,
+        tavily_api_key="",
+        mcp_amap_enabled=False,
+        amap_maps_api_key="",
+        tokenizer_backend="char_estimate",
+        hf_tokenizer_repo="",
+    )
+    provider = DeepseekMcpProvider(settings)
+    captured: dict[str, object] = {}
+    provider._async_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=_FakeDeepseekCompletions(
+                 """```json
+{"items":[{"should_store":true,"memory_type":"preference","memory_text":"用户喜欢直接一点的答复。","canonical_key":"preference:answer_style","importance_score":0.9,"confidence":0.9,"merge_strategy":"replace","reason_code":"stable_preference"}]}
+ ```""",
+                captured,
+            )
+        )
+    )
+
+    result = await provider._invoke_structured_output(
+        [{"role": "system", "content": "你是记忆分析助手。"}],
+        MemoryDecisionBatch,
+    )
+
+    assert result.items[0].should_store is True
+    assert result.items[0].canonical_key == "preference:answer_style"
+    assert "response_format" not in captured
+    assert captured["model"] == "deepseek-chat"

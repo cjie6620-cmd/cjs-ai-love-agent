@@ -1,7 +1,7 @@
 import logging
 import re
 
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -15,23 +15,21 @@ _session_factory: sessionmaker[Session] | None = None
 
 
 def _mask_db_url(url: str) -> str:
-    """对数据库 URL 中的密码做脱敏处理，避免日志泄露敏感信息。"""
+    """目的：避免启动日志或错误日志泄露数据库密码。
+    结果：返回密码被替换为星号的连接串。
+    """
     # 匹配形如 scheme://user:password@host 的部分并把密码替换为 ***
     return re.sub(r"(://[^:/@]+:)[^@]*(@)", r"\1***\2", url)
 
 
 class Base(DeclarativeBase):
-    """SQLAlchemy 模型基类。
-    
-    目的：封装SQLAlchemy 模型基类相关能力。
+    """目的：封装SQLAlchemy 模型基类相关能力。
     结果：对外提供稳定、可复用的调用入口。
     """
 
 
 def get_engine() -> Engine:
-    """惰性获取数据库引擎，首次调用时才真正建立连接池。
-    
-    目的：获取惰性获取数据库引擎，首次调用时才真正建立连接池。
+    """目的：获取惰性获取数据库引擎，首次调用时才真正建立连接池。
     结果：返回当前流程需要的对象、配置或查询结果。
     """
     global _engine
@@ -62,9 +60,7 @@ def get_engine() -> Engine:
 
 
 def get_session_factory() -> sessionmaker[Session]:
-    """统一管理数据库会话工厂，避免业务代码重复创建 Session。
-    
-    目的：获取统一管理数据库会话工厂，避免业务代码重复创建 Session。
+    """目的：获取统一管理数据库会话工厂，避免业务代码重复创建 Session。
     结果：返回当前流程需要的对象、配置或查询结果。
     """
     global _session_factory
@@ -79,9 +75,7 @@ def get_session_factory() -> sessionmaker[Session]:
 
 
 def reset_database_engine() -> None:
-    """测试切换数据库地址时，显式清理已缓存的引擎和会话工厂。
-
-    目的：执行测试切换数据库地址时，显式清理已缓存的引擎和会话工厂相关逻辑。
+    """目的：执行测试切换数据库地址时，显式清理已缓存的引擎和会话工厂相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     global _engine, _session_factory
@@ -92,16 +86,8 @@ def reset_database_engine() -> None:
 
 
 def initialize_database() -> bool:
-    """在应用启动阶段主动探测 MySQL 连通性，并以统一格式输出日志。
-
-    目的：
-        - 与 Redis / MinIO / LangGraph Checkpointer 保持一致的启动日志风格，
-          便于运维在启动阶段一眼判断数据库是否可用。
-        - 连接失败时不抛出异常，仅打 WARN 日志进入降级模式，避免因 MySQL
-          不可用导致整个 FastAPI 进程启动失败。
-
-    返回：
-        bool: True 表示探测成功，False 表示连接失败已降级。
+    """目的：在应用启动阶段主动探测 MySQL 连通性，并以统一格式输出日志。
+    结果：完成当前业务处理并返回约定结果。
     """
     settings = get_settings()
     masked_url = _mask_db_url(settings.mysql_url)
@@ -119,3 +105,43 @@ def initialize_database() -> bool:
     except Exception as exc:  # pragma: no cover - 兜底防御
         logger.warning("MySQL 数据库初始化异常，持久化相关功能将降级: url=%s, 原因=%s", masked_url, exc)
         return False
+
+
+def ensure_local_database_schema() -> None:
+    """目的：避免开发库停留在旧 schema 时，新增 RBAC/知识库表导致应用启动失败。
+    结果：只创建缺失表和补充明确新增列，不删除、不清空、不覆盖已有数据。
+    """
+    settings = get_settings()
+    if settings.app_env.strip().lower() not in {"local", "dev", "development", "test"}:
+        return
+
+    # 确保所有模型已注册到 Base.metadata。
+    from persistence import models as _models  # noqa: F401
+
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    if not settings.mysql_url.startswith("mysql"):
+        return
+
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        table_names = set(inspector.get_table_names())
+
+        def column_names(table_name: str) -> set[str]:
+            return {str(item["name"]) for item in inspector.get_columns(table_name)}
+
+        if "users" in table_names:
+            users_columns = column_names("users")
+            if "tenant_id" not in users_columns:
+                connection.execute(
+                    text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(36) NOT NULL DEFAULT 'default'")
+                )
+            if "status" not in users_columns:
+                connection.execute(
+                    text("ALTER TABLE users ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'active'")
+                )
+
+        if "knowledge_documents" in table_names:
+            document_columns = column_names("knowledge_documents")
+            if "content_text" not in document_columns:
+                connection.execute(text("ALTER TABLE knowledge_documents ADD COLUMN content_text TEXT NULL"))

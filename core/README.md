@@ -14,6 +14,12 @@
 - `container.py`
   作用：应用容器。
   功能：集中装配 Service、Repository、Guard、Workflow 等核心依赖。
+- `event_loop.py`
+  作用：Windows 兼容事件循环工厂。
+  功能：为本地 `uvicorn --reload` 提供兼容的事件循环创建方式。
+- `startup_probe.py`
+  作用：启动依赖探活。
+  功能：探测 Redis、MySQL、pgvector、MinIO、Celery、MCP 等依赖状态，并提供给 `/health`。
 - `tests/`
   作用：基础装配测试。
   功能：验证容器是否正确连线。
@@ -25,6 +31,7 @@
 
 - 提供全局配置读取能力。
 - 提供依赖注入与应用级装配入口。
+- 提供启动阶段依赖探活结果。
 - 保证各模块实例创建方式一致。
 
 ## 4. 依赖边界

@@ -1,6 +1,6 @@
 <template>
-  <div :class="['app-shell', { 'is-chat-route': isChatRoute }]">
-    <header v-if="!isChatRoute" class="shell-header">
+  <div :class="['app-shell', { 'is-chat-route': isChatRoute, 'is-admin-route': isAdminRoute }]">
+    <header v-if="!isChatRoute && !isAdminRoute" class="shell-header">
       <RouterLink class="brand" to="/chat" aria-label="AI Love">
         <img class="brand-logo" src="/i-love-new-york.svg" alt="" />
         <strong>AI Love</strong>
@@ -28,6 +28,7 @@ import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const isChatRoute = computed(() => route.path === '/chat')
+const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 </script>
 
 <style scoped>
@@ -44,6 +45,11 @@ const isChatRoute = computed(() => route.path === '/chat')
 
 .app-shell.is-chat-route {
   grid-template-rows: minmax(0, 1fr);
+}
+
+.app-shell.is-admin-route {
+  grid-template-rows: minmax(0, 1fr);
+  background: #eef1f4;
 }
 
 .shell-header {
@@ -120,6 +126,10 @@ const isChatRoute = computed(() => route.path === '/chat')
 }
 
 .app-shell.is-chat-route .shell-main {
+  padding: 0;
+}
+
+.app-shell.is-admin-route .shell-main {
   padding: 0;
 }
 

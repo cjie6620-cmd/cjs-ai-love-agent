@@ -16,9 +16,7 @@ from .base import DocumentParser, ParsedDocument, ParseError
 
 
 def _decode_best_effort(data: bytes) -> str:
-    """_decode_best_effort 方法。
-    
-    目的：执行_decode_best_effort 方法相关逻辑。
+    """目的：执行_decode_best_effort 方法相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     for enc in ("utf-8", "utf-8-sig", "gbk", "latin-1"):
@@ -30,18 +28,16 @@ def _decode_best_effort(data: bytes) -> str:
 
 
 class PlainTextParser(DocumentParser):
-    """纯文本：.txt 等。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
+    # 目的：保存 SUFFIXES 字段，用于 PlainTextParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".txt", ".text", ".log", ".md", ".markdown", ".rst"})
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -51,9 +47,7 @@ class PlainTextParser(DocumentParser):
         return False
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         text = _decode_best_effort(data)
@@ -61,49 +55,39 @@ class PlainTextParser(DocumentParser):
 
 
 class HtmlParser(DocumentParser):
-    """HTML：剥离标签得到可读文本。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
     class _Stripper(HTMLParser):
-        """用于剥离 HTML 标签的内部解析器。
-
-        目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+        """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
         结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
         """
         def __init__(self) -> None:
-            """初始化 _Stripper 实例。
-
-            目的：接收并保存运行所需的依赖、配置和初始状态。
+            """目的：接收并保存运行所需的依赖、配置和初始状态。
             结果：实例初始化完成，可直接执行后续业务调用。
             """
             super().__init__()
             self.parts: list[str] = []
 
         def handle_data(self, data: str) -> None:
-            """执行 handle_data 方法。
-
-            目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+            """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
             结果：返回或落地稳定结果，供后续流程直接使用。
             """
             self.parts.append(data)
 
         def get_text(self) -> str:
-            """获取目标资源或配置。
-
-            目的：按指定条件读取目标数据、资源或结果集合。
+            """目的：按指定条件读取目标数据、资源或结果集合。
             结果：返回可直接消费的查询结果，减少调用方重复处理。
             """
             return re.sub(r"\s+", " ", "".join(self.parts)).strip()
 
+    # 目的：保存 SUFFIXES 字段，用于 HtmlParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".html", ".htm", ".xhtml"})
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -111,9 +95,7 @@ class HtmlParser(DocumentParser):
         return bool(mime and mime.startswith("text/html"))
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         raw = _decode_best_effort(data)
@@ -124,18 +106,16 @@ class HtmlParser(DocumentParser):
 
 
 class JsonParser(DocumentParser):
-    """JSON：序列化为可读字符串或抽取字符串字段。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
+    # 目的：保存 SUFFIXES 字段，用于 JsonParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".json", ".jsonl"})
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -143,9 +123,7 @@ class JsonParser(DocumentParser):
         return mime in ("application/json", "application/x-ndjson")
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         raw = _decode_best_effort(data)
@@ -161,19 +139,19 @@ class JsonParser(DocumentParser):
 
 
 class CsvParser(DocumentParser):
-    """CSV：按行拼接。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
+    # 目的：保存 SUFFIXES 字段，用于 CsvParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".csv", ".tsv"})
+    # 目的：保存 DELIM 字段，用于 CsvParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 DELIM 值。
     DELIM = {".csv": ",", ".tsv": "\t"}
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -181,9 +159,7 @@ class CsvParser(DocumentParser):
         return mime in ("text/csv", "text/tab-separated-values")
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         raw = _decode_best_effort(data)
@@ -198,18 +174,16 @@ class CsvParser(DocumentParser):
 
 
 class XmlParser(DocumentParser):
-    """XML：抽取元素文本。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
+    # 目的：保存 SUFFIXES 字段，用于 XmlParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".xml", ".svg"})
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -217,9 +191,7 @@ class XmlParser(DocumentParser):
         return bool(mime and ("xml" in mime))
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         try:
@@ -228,6 +200,9 @@ class XmlParser(DocumentParser):
             raise ParseError("invalid xml") from e
 
         def collect(el: Element) -> list[str]:
+            """目的：把当前节点、子节点和尾随文本按遍历顺序抽取出来。
+            结果：返回去空白后的文本片段列表。
+            """
             out: list[str] = []
             if el.text and el.text.strip():
                 out.append(el.text.strip())
@@ -242,18 +217,16 @@ class XmlParser(DocumentParser):
 
 
 class PdfParser(DocumentParser):
-    """PDF：依赖 pypdf（可选）。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
+    # 目的：保存 SUFFIXES 字段，用于 PdfParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".pdf"})
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -261,9 +234,7 @@ class PdfParser(DocumentParser):
         return mime == "application/pdf"
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         try:
@@ -281,18 +252,16 @@ class PdfParser(DocumentParser):
 
 
 class DocxParser(DocumentParser):
-    """Word：依赖 python-docx（可选）。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
+    # 目的：保存 SUFFIXES 字段，用于 DocxParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".docx"})
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -300,9 +269,7 @@ class DocxParser(DocumentParser):
         return mime in ("application/vnd.openxmlformats-officedocument.wordprocessingml.document",)
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         try:
@@ -316,18 +283,16 @@ class DocxParser(DocumentParser):
 
 
 class XlsxParser(DocumentParser):
-    """Excel：依赖 openpyxl（可选）。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
+    # 目的：保存 SUFFIXES 字段，用于 XlsxParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".xlsx", ".xlsm"})
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -335,9 +300,7 @@ class XlsxParser(DocumentParser):
         return mime in ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",)
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         try:
@@ -356,18 +319,16 @@ class XlsxParser(DocumentParser):
 
 
 class PptxParser(DocumentParser):
-    """PPTX：依赖 python-pptx（可选）。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
+    # 目的：保存 SUFFIXES 字段，用于 PptxParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".pptx"})
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -377,9 +338,7 @@ class PptxParser(DocumentParser):
         )
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         try:
@@ -397,18 +356,16 @@ class PptxParser(DocumentParser):
 
 
 class RtfParser(DocumentParser):
-    """RTF：极简剔除控制词，仅作兜底可读化。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
+    # 目的：保存 SUFFIXES 字段，用于 RtfParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".rtf"})
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -416,9 +373,7 @@ class RtfParser(DocumentParser):
         return mime == "application/rtf"
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         raw = _decode_best_effort(data)
@@ -430,18 +385,16 @@ class RtfParser(DocumentParser):
 
 
 class ZipArchiveParser(DocumentParser):
-    """ZIP 内文本/Markdown 合并（轻量知识包导入）。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
+    # 目的：保存 SUFFIXES 字段，用于 ZipArchiveParser 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 SUFFIXES 值。
     SUFFIXES = frozenset({".zip"})
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if suffix in self.SUFFIXES:
@@ -449,9 +402,7 @@ class ZipArchiveParser(DocumentParser):
         return mime == "application/zip"
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         parts: list[str] = []
@@ -475,24 +426,18 @@ class ZipArchiveParser(DocumentParser):
 
 
 class Utf8FallbackParser(DocumentParser):
-    """最后兜底：将字节当文本解码，用于未知扩展名。
-
-    目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
+    """目的：封装特定格式的解析逻辑，将原始内容转换为标准文本结果。
     结果：上游流程可以复用统一解析接口处理不同文件类型，降低适配成本。
     """
 
     def supports(self, mime: str | None, suffix: str) -> bool:
-        """判断当前实现是否支持处理目标对象。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         return True
 
     def parse(self, data: bytes, *, filename: str = "") -> ParsedDocument:
-        """解析输入内容并返回标准化结果。
-
-        目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
+        """目的：将输入内容转换为统一的内部表示，屏蔽原始格式差异。
         结果：返回标准化解析结果，便于后续链路复用和扩展。
         """
         text = _decode_best_effort(data)
@@ -505,9 +450,7 @@ class Utf8FallbackParser(DocumentParser):
 
 
 def default_parser_chain() -> list[DocumentParser]:
-    """返回按优先级排序的策略列表（具体先于兜底）。
-    
-    目的：执行返回按优先级排序的策略列表（具体先于兜底）相关逻辑。
+    """目的：执行返回按优先级排序的策略列表（具体先于兜底）相关逻辑。
     结果：返回当前步骤的处理结果，供后续流程继续使用。
     """
     return [
@@ -524,4 +467,3 @@ def default_parser_chain() -> list[DocumentParser]:
         PlainTextParser(),
         Utf8FallbackParser(),
     ]
-

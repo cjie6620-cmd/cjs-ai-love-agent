@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from contracts.chat import ChatReplyModel, MemoryDecision
+from contracts.chat import ChatReplyModel, MemoryDecisionBatch
 from core.config import get_settings
 from llm.factory import build_llm_provider, build_memory_llm_provider
 from llm.providers import LlmProvider
@@ -24,16 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 class LlmClient:
-    """统一大语言模型客户端：委托给对应 Provider 执行。
-    
-    目的：封装统一大语言模型客户端：委托给对应 Provider 执行相关的调用能力与资源管理。
+    """目的：封装统一大语言模型客户端：委托给对应 Provider 执行相关的调用能力与资源管理。
     结果：上层可通过统一客户端接口完成访问。
     """
 
     def __init__(self) -> None:
-        """初始化 LlmClient。
-        
-        目的：初始化LlmClient所需的依赖、配置和初始状态。
+        """目的：初始化LlmClient所需的依赖、配置和初始状态。
         结果：实例创建完成后可直接参与后续业务流程。
         """
         self.settings = get_settings()
@@ -41,9 +37,7 @@ class LlmClient:
 
     @classmethod
     def for_memory_analysis(cls) -> "LlmClient":
-        """创建长期记忆分析客户端。
-
-        目的：为 Celery 后台记忆任务构建固定使用 DeepSeek 的结构化输出客户端。
+        """目的：为 Celery 后台记忆任务构建固定使用 DeepSeek 的结构化输出客户端。
         结果：返回与主聊天模型解耦的 LlmClient 实例。
         """
         client = cls.__new__(cls)
@@ -59,18 +53,14 @@ class LlmClient:
         *,
         history: list[LlmMessage] | None = None,
     ) -> str:
-        """非流式生成：直接返回完整响应文本。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         reply, _ = await self._provider.generate(system_prompt, user_prompt, history=history)
         return reply
 
     def get_mcp_calls(self) -> list[McpCallInfo]:
-        """获取最近一次 generate() 调用的 MCP 调用追踪信息。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         if hasattr(self._provider, "_mcp_calls"):
@@ -78,9 +68,7 @@ class LlmClient:
         return []
 
     def get_mcp_tools_info(self) -> list[dict[str, Any]]:
-        """获取当前 Provider 注册的 MCP 工具信息。
-
-        目的：按指定条件读取目标数据、资源或结果集合。
+        """目的：按指定条件读取目标数据、资源或结果集合。
         结果：返回可直接消费的查询结果，减少调用方重复处理。
         """
         if hasattr(self._provider, "_mcp_tools"):
@@ -94,9 +82,7 @@ class LlmClient:
         *,
         history: list[LlmMessage] | None = None,
     ) -> AsyncIterator[tuple[str, list[McpCallInfo]]]:
-        """流式生成：逐步返回响应内容。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         async for chunk in self._provider.generate_stream(
@@ -109,7 +95,9 @@ class LlmClient:
         self,
         prompt_spec: PromptSpec,
     ) -> ChatReplyModel:
-        """工具 / MCP 完成后，基于 provider 缓存的上下文生成最终结构化回复。"""
+        """目的：在工具 / MCP 完成后，基于 provider 缓存上下文生成最终 ChatReplyModel。
+        结果：返回可直接写入聊天响应的结构化回复。
+        """
         payload, _ = await self._provider.finalize_chat_reply(prompt_spec)
         return payload
 
@@ -119,13 +107,17 @@ class LlmClient:
         prompt_spec: PromptSpec,
         *,
         history: list[LlmMessage] | None = None,
-    ) -> MemoryDecision:
-        """执行长期记忆决策专用 structured 输出。"""
+    ) -> MemoryDecisionBatch:
+        """目的：使用记忆决策 prompt 判断本轮对话是否值得沉淀为长期记忆。
+        结果：返回结构化 MemoryDecisionBatch。
+        """
         payload, _ = await self._provider.decide_memory(prompt_spec, history=history)
         return payload
 
     def has_pending_tool_history(self) -> bool:
-        """返回 provider 是否保留了待终结的工具上下文。"""
+        """目的：让工作流知道是否需要进入工具最终回复生成阶段。
+        结果：返回 provider 是否保留了待终结上下文。
+        """
         return self._provider.has_pending_tool_history()
 
     def generate_sync(
@@ -135,9 +127,7 @@ class LlmClient:
         *,
         history: list[LlmMessage] | None = None,
     ) -> str:
-        """同步调用 LLM：用于 Celery Worker 和非异步上下文。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
         messages: list[LlmMessage] = [

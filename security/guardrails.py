@@ -6,13 +6,13 @@ logger = logging.getLogger(__name__)
 
 
 class SafetyGuard:
-    """输入输出安全治理模块，支持三级风险识别和输出内容清洗。
-
-    目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
+    """目的：封装当前领域对象的核心职责，统一相关行为和数据边界。
     结果：相关模块可以围绕该对象稳定协作，提升代码可读性和可维护性。
     """
 
     # 高风险关键词：自杀自残意念 + 暴力倾向
+    # 目的：保存 HIGH_RISK_KEYWORDS 字段，用于 SafetyGuard 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 HIGH_RISK_KEYWORDS 值。
     HIGH_RISK_KEYWORDS: tuple[str, ...] = (
         # 自杀自残意念
         "不想活了",
@@ -33,6 +33,8 @@ class SafetyGuard:
     )
 
     # 中风险关键词：过度依赖AI + 越界暗示
+    # 目的：保存 MEDIUM_RISK_KEYWORDS 字段，用于 SafetyGuard 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 MEDIUM_RISK_KEYWORDS 值。
     MEDIUM_RISK_KEYWORDS: tuple[str, ...] = (
         # 过度依赖AI
         "没有你我活不了",
@@ -50,6 +52,8 @@ class SafetyGuard:
     )
 
     # 输出禁止模式：AI 回复中不应出现的越界内容
+    # 目的：保存 OUTPUT_FORBIDDEN_PATTERNS 字段，用于 SafetyGuard 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 OUTPUT_FORBIDDEN_PATTERNS 值。
     OUTPUT_FORBIDDEN_PATTERNS: tuple[tuple[str, str], ...] = (
         ("我也爱你", "我会一直在这里陪你，认真倾听你的每一句话。"),
         ("我们在一起吧", "我是你的AI伙伴，会一直支持你。"),
@@ -60,9 +64,7 @@ class SafetyGuard:
     )
 
     def inspect_input(self, message: str) -> str:
-        """检查用户输入的安全级别，返回 high / medium / low 三级。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         if any(keyword in message for keyword in self.HIGH_RISK_KEYWORDS):
@@ -72,9 +74,7 @@ class SafetyGuard:
         return "low"
 
     def inspect_output(self, reply: str, safety_level: str) -> str:
-        """检查并处理 AI 输出的安全内容。
-
-        目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
+        """目的：根据当前输入执行条件判断，统一布尔分支的判定逻辑。
         结果：返回明确的判断结果，供上层决定后续流程。
         """
         # 第一步：越界内容清洗（所有级别都执行）
@@ -89,9 +89,7 @@ class SafetyGuard:
         return cleaned_reply
 
     def _sanitize_output(self, reply: str) -> str:
-        """对 AI 回复执行越界内容清洗，将禁止模式替换为安全表达。
-
-        目的：统一处理输入值的边界情况、格式约束和清洗规则。
+        """目的：统一处理输入值的边界情况、格式约束和清洗规则。
         结果：返回满足约束的结果，避免脏数据影响后续逻辑。
         """
         sanitized = reply
@@ -109,9 +107,7 @@ class SafetyGuard:
         action: str = "block",
         session_id: str | None = None,
     ) -> None:
-        """将 high/medium 安全事件写入审计日志表。
-
-        目的：持久化、上传或补充目标数据，保持状态同步。
+        """目的：持久化、上传或补充目标数据，保持状态同步。
         结果：相关数据被成功写入或更新，便于后续流程继续使用。
         """
         # low 级别不记录审计日志

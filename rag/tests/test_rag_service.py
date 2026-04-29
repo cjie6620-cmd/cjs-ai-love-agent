@@ -42,6 +42,9 @@ async def test_index_text_success() -> None:
         title=request.title,
         category=request.category,
         source=request.source,
+        tenant_id="default",
+        created_by="",
+        document_id="",
     )
 
 
@@ -139,5 +142,6 @@ async def test_replace_existing_document_deletes_vector_and_es() -> None:
         category="relationship_knowledge",
         filename="guide.md",
         doc_id="doc-1",
+        tenant_id="default",
     )
     service._delete_lexical_document.assert_called_once()

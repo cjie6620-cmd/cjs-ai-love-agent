@@ -222,7 +222,6 @@ const quickHints = [
   '需要一些鼓励',
 ]
 
-const DEMO_USER_ID = 'user-demo-001'
 const DEFAULT_WELCOME_MESSAGE = '你好，直接发消息就行。'
 const DEFAULT_CONVERSATION_TITLE = '新对话'
 const DEFAULT_CONVERSATION_PREVIEW = '开始聊天'
@@ -338,7 +337,7 @@ watch(
 )
 
 const loadConversationHistory = async () => {
-  const history = await fetchConversationHistory(DEMO_USER_ID)
+  const history = await fetchConversationHistory()
   if (history.conversations.length === 0) {
     return
   }
@@ -436,7 +435,7 @@ const submitMessage = async (directMessage?: unknown) => {
     await streamChatMessage(
       {
         session_id: conversationId,
-        user_id: DEMO_USER_ID,
+        user_id: '',
         message: currentMessage,
         mode: conversation.mode,
       },

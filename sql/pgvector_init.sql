@@ -1,10 +1,16 @@
 -- AI Love Agent PostgreSQL / pgvector 初始化脚本（bootstrap）
 -- 这个版本只负责“数据库与账号初始化”，适合在 Navicat / DBeaver / DataGrip 中执行。
+-- 不负责创建业务向量表；表结构定义在 sql/pgvector_schema.sql。
 --
 -- 使用方式：
 -- 1. 连接 PostgreSQL 管理库（通常是 postgres）
 -- 2. 执行本脚本，完成账号与数据库准备
 -- 3. 再切换连接到 ai_love_vector 数据库，执行 sql/pgvector_schema.sql
+--
+-- 初始化边界：
+-- 1. 这里创建的是 PostgreSQL 账号 ai_love
+-- 2. 这里创建的是向量数据库 ai_love_vector
+-- 3. 如果数据库已存在，CREATE DATABASE 报“已存在”可以忽略
 
 
 -- =========================================================

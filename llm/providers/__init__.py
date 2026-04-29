@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Protocol
 
-from contracts.chat import ChatReplyModel, MemoryDecision
+from contracts.chat import ChatReplyModel, MemoryDecisionBatch
 from llm.core.types import LlmMessage, McpCallInfo
 from prompt import PromptSpec
 
@@ -27,12 +27,12 @@ __all__ = [
 
 
 class LlmProvider(Protocol):
-    """LLM 提供者统一接口协议。
-    
-    目的：封装LLM 提供者统一接口协议相关的模型或能力实现。
+    """目的：封装LLM 提供者统一接口协议相关的模型或能力实现。
     结果：上层可按统一 Provider 接口发起调用。
     """
 
+    # 目的：保存 supports_structured_output 字段，用于 LlmProvider 的业务状态、配置或序列化。
+    # 结果：实例在读写、校验和协作时可以获得稳定的 supports_structured_output 值。
     supports_structured_output: bool
 
     async def generate(
@@ -42,9 +42,7 @@ class LlmProvider(Protocol):
         *,
         history: list[LlmMessage] | None = None,
     ) -> tuple[str, list[McpCallInfo]]:
-        """非流式生成：直接返回完整响应。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         ...
@@ -56,9 +54,7 @@ class LlmProvider(Protocol):
         *,
         history: list[LlmMessage] | None = None,
     ) -> AsyncIterator[tuple[str, list[McpCallInfo]]]:
-        """流式生成：逐步返回响应内容。
-
-        目的：根据当前上下文组装目标对象、消息或输出结构。
+        """目的：根据当前上下文组装目标对象、消息或输出结构。
         结果：返回结构完整的结果，供后续流程直接使用。
         """
         ...
@@ -67,7 +63,9 @@ class LlmProvider(Protocol):
         self,
         prompt_spec: PromptSpec,
     ) -> tuple[ChatReplyModel, list[McpCallInfo]]:
-        """基于最近一次工具上下文生成最终结构化聊天回复。"""
+        """目的：约束 provider 必须提供工具终结后的 ChatReplyModel 生成能力。
+        结果：返回结构化聊天回复和 MCP 调用记录。
+        """
         ...
 
     async def decide_memory(
@@ -75,10 +73,14 @@ class LlmProvider(Protocol):
         prompt_spec: PromptSpec,
         *,
         history: list[LlmMessage] | None = None,
-    ) -> tuple[MemoryDecision, list[McpCallInfo]]:
-        """执行长期记忆决策专用 structured 输出。"""
+    ) -> tuple[MemoryDecisionBatch, list[McpCallInfo]]:
+        """目的：约束 provider 必须支持 MemoryDecisionBatch schema 的结构化调用。
+        结果：返回长期记忆决策和 MCP 调用记录。
+        """
         ...
 
     def has_pending_tool_history(self) -> bool:
-        """返回是否存在待终结的工具上下文。"""
+        """目的：为工作流路由提供是否需要工具终结阶段的判断信号。
+        结果：返回 True 表示 provider 内部保留了待终结上下文。
+        """
         ...

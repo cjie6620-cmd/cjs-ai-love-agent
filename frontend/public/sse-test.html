@@ -60,10 +60,10 @@
       let fullContent = ''
 
       try {
-        log('<pre>[浏览器] 发起 fetch 请求到 /chat/reply/stream</pre>', 'debug')
+        log('<pre>[浏览器] 发起 fetch 请求到 /chat/stream</pre>', 'debug')
         log(`<pre>[浏览器] 模式: text/event-stream, 来源: ${location.origin}</pre>`, 'debug')
 
-        const response = await fetch('http://127.0.0.1:8000/api/v1/chat/reply/stream', {
+        const response = await fetch('http://127.0.0.1:8081/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

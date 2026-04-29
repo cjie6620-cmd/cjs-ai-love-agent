@@ -21,16 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 class BaseToolClient(ABC):
-    """工具客户端抽象基类：定义工具客户端的通用接口。
-    
-    目的：封装工具客户端抽象基类：定义工具客户端的通用接口相关的调用能力与资源管理。
+    """目的：封装工具客户端抽象基类：定义工具客户端的通用接口相关的调用能力与资源管理。
     结果：上层可通过统一客户端接口完成访问。
     """
 
     def __init__(self) -> None:
-        """初始化工具客户端基类。
-
-        目的：接收并保存运行所需的依赖、配置和初始状态。
+        """目的：接收并保存运行所需的依赖、配置和初始状态。
         结果：实例初始化完成，可直接执行后续业务调用。
         """
         self._initialized = False
@@ -39,9 +35,7 @@ class BaseToolClient(ABC):
 
     @abstractmethod
     async def list_tools(self) -> list[dict[str, Any]]:
-        """获取可用工具列表（抽象方法）。
-
-        目的：按指定条件读取目标数据、资源或结果集合。
+        """目的：按指定条件读取目标数据、资源或结果集合。
         结果：返回可直接消费的查询结果，减少调用方重复处理。
         """
 
@@ -51,9 +45,7 @@ class BaseToolClient(ABC):
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        """调用指定的工具（抽象方法）。
-
-        目的：封装一次外部能力或链路调用，统一入参与异常处理。
+        """目的：封装一次外部能力或链路调用，统一入参与异常处理。
         结果：返回稳定的执行结果，便于业务层直接消费或继续编排。
         """
 
@@ -65,9 +57,7 @@ class BaseToolClient(ABC):
         call_list: list["McpCallInfo"],
         server_label: str,
     ) -> dict[str, Any]:
-        """带追踪的调用：执行工具并记录调用信息。
-
-        目的：持久化、上传或补充目标数据，保持状态同步。
+        """目的：持久化、上传或补充目标数据，保持状态同步。
         结果：相关数据被成功写入或更新，便于后续流程继续使用。
         """
         from llm.core.types import McpCallInfo
@@ -114,17 +104,13 @@ class BaseToolClient(ABC):
             return {"error": str(exc)}
 
     async def close(self) -> None:
-        """关闭工具客户端，释放资源。
-
-        目的：清理当前资源、连接或状态，避免残留副作用。
+        """目的：清理当前资源、连接或状态，避免残留副作用。
         结果：对象恢复到可控状态，降低资源泄漏和脏数据风险。
         """
         pass
 
     async def ensure_tools_loaded(self) -> list[dict[str, Any]]:
-        """确保工具列表已加载（惰性加载模式）。
-
-        目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
+        """目的：封装当前步骤的核心处理逻辑，统一该能力的执行入口。
         结果：返回或落地稳定结果，供后续流程直接使用。
         """
         if not self._tools_loaded:

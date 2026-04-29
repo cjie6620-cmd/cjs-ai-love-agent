@@ -1,17 +1,17 @@
 # dev_run.ps1
-# 开发启动脚本：启动前自动清理残留 uvicorn 进程与 8000 端口，避免 Windows 下
+# 开发启动脚本：启动前自动清理残留 uvicorn 进程与 8081 端口，避免 Windows 下
 # reloader 异常退出后端口僵死（socket 引用已不存在的 PID，导致新进程请求挂起）。
 #
 # 使用方式：
 #   PS> .\scripts\dev_run.ps1
-#   PS> .\scripts\dev_run.ps1 -Port 8001
+#   PS> .\scripts\dev_run.ps1 -Port 8081
 #
 # 依赖：PowerShell 5.1+、.venv 已激活或 python 在 PATH 中。
 
 [CmdletBinding()]
 param(
-    # 监听端口，默认 8000
-    [int]$Port = 8000,
+    # 监听端口，默认 8081
+    [int]$Port = 8081,
     # FastAPI 应用入口
     [string]$App = "app:app",
     # 是否启用 --reload
@@ -60,7 +60,7 @@ Write-Host "==> [2/3] 校验端口 $Port 是否释放..." -ForegroundColor Cyan
 $stillListening = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
 if ($stillListening) {
     Write-Host "   端口 $Port 仍被占用，可能是 Windows 僵尸 socket（PID 已不存在但内核未释放）" -ForegroundColor Red
-    Write-Host "   建议：使用其他端口（例如 -Port 8001）或重启 Windows" -ForegroundColor Red
+    Write-Host "   建议：使用其他端口（例如 -Port 8081 之外的空闲端口）或重启 Windows" -ForegroundColor Red
     exit 1
 } else {
     Write-Host "   端口 $Port 已空闲" -ForegroundColor Green
@@ -69,6 +69,11 @@ if ($stillListening) {
 Write-Host "==> [3/3] 启动 uvicorn ..." -ForegroundColor Cyan
 $reloadFlag = if ($NoReload.IsPresent) { @() } else { @("--reload") }
 
-# 启动 uvicorn，把参数拼齐后交给 python -m uvicorn
-$uvicornArgs = @("-m", "uvicorn", $App, "--host", "127.0.0.1", "--port", "$Port") + $reloadFlag
+# 启动 uvicorn；固定 Selector loop，避免 Windows Proactor 与 psycopg 异步池不兼容
+$uvicornArgs = @(
+    "-m", "uvicorn", $App,
+    "--host", "127.0.0.1",
+    "--port", "$Port",
+    "--loop", "core.event_loop:windows_compatible_loop_factory"
+) + $reloadFlag
 & python @uvicornArgs
